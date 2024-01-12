@@ -15,7 +15,7 @@ import (
 var Version = argon2.Version
 
 var (
-	ErrInvalidHash         = errors.New("argon2id: hash is not in the correct format")
+	ErrMalformedHash       = errors.New("argon2id: hash is not in the correct format")
 	ErrIncompatibleVariant = errors.New("argon2id: incompatible variant of argon2")
 	ErrIncompatibleVersion = errors.New("argon2id: incompatible version of argon2")
 )
@@ -62,7 +62,7 @@ func Encode(params *Params, salt, key []byte) string {
 func Decode(hash string) (params *Params, salt, key []byte, err error) {
 	vals := strings.Split(hash, "$")
 	if len(vals) != 6 || vals[0] != "" {
-		return nil, nil, nil, ErrInvalidHash
+		return nil, nil, nil, ErrMalformedHash
 	}
 	if vals[1] != "argon2id" {
 		return nil, nil, nil, ErrIncompatibleVariant
