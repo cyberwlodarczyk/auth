@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 	}
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "maildev/maildev",
-		Tag:        "latest",
+		Tag:        "2.1.0",
 		Env: []string{
 			fmt.Sprintf("MAILDEV_INCOMING_USER=%s", cfg.Username),
 			fmt.Sprintf("MAILDEV_INCOMING_PASS=%s", cfg.Password),

@@ -1,4 +1,4 @@
-package db
+package postgres
 
 import (
 	"context"
@@ -10,7 +10,7 @@ type DB struct {
 	pool *pgxpool.Pool
 }
 
-func New(ctx context.Context, uri string) (*DB, error) {
+func Open(ctx context.Context, uri string) (*DB, error) {
 	pool, err := pgxpool.New(ctx, uri)
 	if err != nil {
 		return nil, err

@@ -1,4 +1,4 @@
-package db
+package postgres
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func TestMain(m *testing.M) {
 	}
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
-		Tag:        "latest",
+		Tag:        "16",
 		Env: []string{
 			"POSTGRES_PASSWORD=secret",
 			"POSTGRES_USER=golang",
@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	pool.MaxWait = 20 * time.Second
 	ctx := context.Background()
 	if err = pool.Retry(func() error {
-		db, err = New(ctx, fmt.Sprintf("postgres://golang:secret@%s/test", resource.GetHostPort("5432/tcp")))
+		db, err = Open(ctx, fmt.Sprintf("postgres://golang:secret@%s/test?sslmode=disable", resource.GetHostPort("5432/tcp")))
 		if err != nil {
 			return err
 		}
