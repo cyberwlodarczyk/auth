@@ -3,6 +3,8 @@ module github.com/cyberwlodarczyk/auth
 go 1.21.2
 
 require (
+	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21
+	github.com/emersion/go-smtp v0.20.1
 	github.com/golang-jwt/jwt/v5 v5.2.0
 	github.com/jackc/pgx/v5 v5.5.2
 	github.com/ory/dockertest/v3 v3.10.0
