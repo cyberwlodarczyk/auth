@@ -7,17 +7,12 @@ import (
 	"io"
 	"time"
 
+	"github.com/cyberwlodarczyk/auth/mail"
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
 )
 
-type Headers struct {
-	From    string
-	To      string
-	Subject string
-}
-
-func Write(w io.Writer, headers Headers, tmpl *template.Template, data any, date time.Time) error {
+func Write(w io.Writer, headers mail.Headers, tmpl *template.Template, data any, date time.Time) error {
 	var err error
 	for _, header := range []struct {
 		key   string
@@ -54,13 +49,21 @@ type Config struct {
 	Password  string
 }
 
-func Ping(cfg *Config) error {
-	c, err := smtp.Dial(cfg.Addr)
+func NewService(cfg *Config) mail.Service {
+	return &service{cfg}
+}
+
+type service struct {
+	cfg *Config
+}
+
+func (s *service) Ping() error {
+	c, err := smtp.Dial(s.cfg.Addr)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
-	if err = c.Hello(cfg.Host); err != nil {
+	if err = c.Hello(s.cfg.Host); err != nil {
 		return err
 	}
 	if err = c.Noop(); err != nil {
@@ -69,21 +72,21 @@ func Ping(cfg *Config) error {
 	return c.Quit()
 }
 
-func Send(cfg *Config, headers Headers, tmpl *template.Template, data any) error {
-	c, err := smtp.Dial(cfg.Addr)
+func (s *service) Send(headers mail.Headers, tmpl *template.Template, data any) error {
+	c, err := smtp.Dial(s.cfg.Addr)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
-	if err = c.Hello(cfg.Host); err != nil {
+	if err = c.Hello(s.cfg.Host); err != nil {
 		return err
 	}
-	if cfg.TLSConfig != nil {
-		if err = c.StartTLS(cfg.TLSConfig); err != nil {
+	if s.cfg.TLSConfig != nil {
+		if err = c.StartTLS(s.cfg.TLSConfig); err != nil {
 			return err
 		}
 	}
-	if err = c.Auth(sasl.NewPlainClient("", cfg.Username, cfg.Password)); err != nil {
+	if err = c.Auth(sasl.NewPlainClient("", s.cfg.Username, s.cfg.Password)); err != nil {
 		return err
 	}
 	if err = c.Mail(headers.From, nil); err != nil {

@@ -4,26 +4,31 @@ import (
 	"context"
 	"time"
 
+	"github.com/cyberwlodarczyk/auth/db"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type User struct {
-	Id        int64
-	Email     string
-	Name      string
-	Password  string
-	CreatedAt time.Time
-}
-
-type UserService struct {
+type userService struct {
 	pool *pgxpool.Pool
 }
 
-func NewUserService(ctx context.Context, db *DB) *UserService {
-	return &UserService{db.pool}
+func (s *userService) Init(ctx context.Context) error {
+	_, err := s.pool.Exec(
+		ctx,
+		`
+			CREATE TABLE user_ (
+				id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				email TEXT NOT NULL UNIQUE,
+				name TEXT NOT NULL,
+				password TEXT NOT NULL,
+				created_at TIMESTAMP NOT NULL DEFAULT NOW()
+			)
+		`,
+	)
+	return err
 }
 
-func (s *UserService) GetById(ctx context.Context, id int64) (user User, err error) {
+func (s *userService) GetById(ctx context.Context, id int64) (user db.User, err error) {
 	err = isFound(s.pool.QueryRow(
 		ctx,
 		`
@@ -36,7 +41,7 @@ func (s *UserService) GetById(ctx context.Context, id int64) (user User, err err
 	return
 }
 
-func (s *UserService) GetByEmail(ctx context.Context, email string) (user User, err error) {
+func (s *userService) GetByEmail(ctx context.Context, email string) (user db.User, err error) {
 	err = isFound(s.pool.QueryRow(
 		ctx,
 		`
@@ -49,13 +54,7 @@ func (s *UserService) GetByEmail(ctx context.Context, email string) (user User, 
 	return
 }
 
-type CreateUserOpts struct {
-	Email    string
-	Name     string
-	Password string
-}
-
-func (s *UserService) Create(ctx context.Context, opts CreateUserOpts) (id int64, createdAt time.Time, err error) {
+func (s *userService) Create(ctx context.Context, opts db.CreateUserOpts) (id int64, createdAt time.Time, err error) {
 	err = isUnique(s.pool.QueryRow(
 		ctx,
 		`
@@ -70,7 +69,7 @@ func (s *UserService) Create(ctx context.Context, opts CreateUserOpts) (id int64
 	return
 }
 
-func (s *UserService) EditEmail(ctx context.Context, id int64, email string) error {
+func (s *userService) EditEmail(ctx context.Context, id int64, email string) error {
 	return isUnique(isAffected(s.pool.Exec(
 		ctx,
 		"UPDATE user_ SET email = $2 WHERE id = $1",
@@ -79,7 +78,7 @@ func (s *UserService) EditEmail(ctx context.Context, id int64, email string) err
 	)))
 }
 
-func (s *UserService) EditName(ctx context.Context, id int64, name string) error {
+func (s *userService) EditName(ctx context.Context, id int64, name string) error {
 	return isAffected(s.pool.Exec(
 		ctx,
 		"UPDATE user_ SET name = $2 WHERE id = $1",
@@ -88,7 +87,7 @@ func (s *UserService) EditName(ctx context.Context, id int64, name string) error
 	))
 }
 
-func (s *UserService) EditPassword(ctx context.Context, id int64, password string) error {
+func (s *userService) EditPassword(ctx context.Context, id int64, password string) error {
 	return isAffected(s.pool.Exec(
 		ctx,
 		"UPDATE user_ SET password = $2 WHERE id = $1",
@@ -97,7 +96,7 @@ func (s *UserService) EditPassword(ctx context.Context, id int64, password strin
 	))
 }
 
-func (s *UserService) Delete(ctx context.Context, id int64) error {
+func (s *userService) Delete(ctx context.Context, id int64) error {
 	return isAffected(s.pool.Exec(
 		ctx,
 		"DELETE FROM user_ WHERE id = $1",

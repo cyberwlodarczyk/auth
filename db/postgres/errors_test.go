@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cyberwlodarczyk/auth/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -17,7 +18,7 @@ func TestIsFound(t *testing.T) {
 	}{
 		{nil, nil},
 		{err, err},
-		{pgx.ErrNoRows, ErrNotFound},
+		{pgx.ErrNoRows, db.ErrNotFound},
 	}
 	for _, test := range tests {
 		if err = isFound(test.given); err != test.expected {
@@ -33,7 +34,7 @@ func TestIsUnique(t *testing.T) {
 	}{
 		{nil, nil},
 		{err, err},
-		{&pgconn.PgError{Code: "23505"}, ErrAlreadyExists},
+		{&pgconn.PgError{Code: "23505"}, db.ErrAlreadyExists},
 	}
 	for _, test := range tests {
 		if err = isUnique(test.given); err != test.expected {
@@ -51,7 +52,7 @@ func TestIsAffected(t *testing.T) {
 		{pgconn.NewCommandTag("DELETE 1"), nil, nil},
 		{pgconn.NewCommandTag("DELETE 0"), err, err},
 		{pgconn.NewCommandTag("UPDATE 1"), err, err},
-		{pgconn.NewCommandTag("UPDATE 0"), nil, ErrNotFound},
+		{pgconn.NewCommandTag("UPDATE 0"), nil, db.ErrNotFound},
 	}
 	for _, test := range tests {
 		if err = isAffected(test.tag, test.given); err != test.expected {

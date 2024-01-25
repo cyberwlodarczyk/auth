@@ -4,21 +4,15 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"runtime"
 	"strings"
 
+	"github.com/cyberwlodarczyk/auth/password"
 	"golang.org/x/crypto/argon2"
 )
 
-var Version = argon2.Version
-
-var (
-	ErrMalformedHash       = errors.New("argon2id: hash is not in the correct format")
-	ErrIncompatibleVariant = errors.New("argon2id: incompatible variant of argon2")
-	ErrIncompatibleVersion = errors.New("argon2id: incompatible version of argon2")
-)
+const Version = argon2.Version
 
 var DefaultParams = &Params{
 	Memory:      64 * 1024,
@@ -62,18 +56,18 @@ func Encode(params *Params, salt, key []byte) string {
 func Decode(hash string) (params *Params, salt, key []byte, err error) {
 	vals := strings.Split(hash, "$")
 	if len(vals) != 6 || vals[0] != "" {
-		return nil, nil, nil, ErrMalformedHash
+		return nil, nil, nil, password.ErrInvalidFormat
 	}
 	if vals[1] != "argon2id" {
-		return nil, nil, nil, ErrIncompatibleVariant
+		return nil, nil, nil, password.ErrIncompatibleVariant
 	}
 	var version int
 	_, err = fmt.Sscanf(vals[2], "v=%d", &version)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, password.ErrInvalidFormat
 	}
 	if version != Version {
-		return nil, nil, nil, ErrIncompatibleVersion
+		return nil, nil, nil, password.ErrIncompatibleVersion
 	}
 	params = &Params{}
 	_, err = fmt.Sscanf(
@@ -84,16 +78,16 @@ func Decode(hash string) (params *Params, salt, key []byte, err error) {
 		&params.Parallelism,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, password.ErrInvalidFormat
 	}
 	salt, err = base64.RawStdEncoding.Strict().DecodeString(vals[4])
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, password.ErrInvalidFormat
 	}
 	params.SaltLength = uint32(len(salt))
 	key, err = base64.RawStdEncoding.Strict().DecodeString(vals[5])
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, password.ErrInvalidFormat
 	}
 	params.KeyLength = uint32(len(key))
 	return params, salt, key, nil
@@ -107,22 +101,33 @@ func RandomSalt(n uint32) ([]byte, error) {
 	return b, nil
 }
 
-func Hash(password []byte, params *Params) (hash string, err error) {
-	salt, err := RandomSalt(params.SaltLength)
+func NewService(params *Params) password.Service {
+	return &service{params}
+}
+
+type service struct {
+	params *Params
+}
+
+func (s *service) Hash(password []byte) (hash string, err error) {
+	salt, err := RandomSalt(s.params.SaltLength)
 	if err != nil {
 		return "", err
 	}
-	return Encode(params, salt, password), nil
+	return Encode(s.params, salt, password), nil
 }
 
-func Compare(password []byte, hash string) (match bool, params *Params, err error) {
+func (s *service) Compare(password []byte, hash string) (match bool, rotate bool, err error) {
 	params, salt, key, err := Decode(hash)
 	if err != nil {
-		return false, nil, err
+		return false, false, err
 	}
 	otherKey := Key(params, salt, password)
 	if subtle.ConstantTimeEq(int32(len(key)), int32(len(otherKey))) == 0 {
-		return false, params, nil
+		return false, false, nil
 	}
-	return subtle.ConstantTimeCompare(key, otherKey) == 1, params, nil
+	if subtle.ConstantTimeCompare(key, otherKey) == 0 {
+		return false, false, nil
+	}
+	return true, *params != *s.params, nil
 }

@@ -8,21 +8,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cyberwlodarczyk/auth/db"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
-var db *DB
+var svc db.Service
 
 func TestMain(m *testing.M) {
-	pool, err := dockertest.NewPool("")
+	dockerPool, err := dockertest.NewPool("")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err = pool.Client.Ping(); err != nil {
+	if err = dockerPool.Client.Ping(); err != nil {
 		log.Fatal(err)
 	}
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+	resource, err := dockerPool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
 		Tag:        "16",
 		Env: []string{
@@ -39,20 +40,20 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 	resource.Expire(20)
-	pool.MaxWait = 20 * time.Second
+	dockerPool.MaxWait = 20 * time.Second
 	ctx := context.Background()
-	if err = pool.Retry(func() error {
-		db, err = Open(ctx, fmt.Sprintf("postgres://golang:secret@%s/test?sslmode=disable", resource.GetHostPort("5432/tcp")))
+	if err = dockerPool.Retry(func() error {
+		svc, err = NewService(ctx, fmt.Sprintf("postgres://golang:secret@%s/test?sslmode=disable", resource.GetHostPort("5432/tcp")))
 		if err != nil {
 			return err
 		}
-		return db.Ping(ctx)
+		return svc.Ping(ctx)
 	}); err != nil {
 		log.Fatal(err)
 	}
 	code := m.Run()
-	db.Close()
-	if err = pool.Purge(resource); err != nil {
+	svc.Close()
+	if err = dockerPool.Purge(resource); err != nil {
 		log.Fatal(err)
 	}
 	os.Exit(code)

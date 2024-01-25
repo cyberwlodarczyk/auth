@@ -1,7 +1,6 @@
 package smtp
 
 import (
-	"fmt"
 	"html/template"
 	"log"
 	"os"
@@ -9,39 +8,36 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cyberwlodarczyk/auth/mail"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
 var (
-	cfg = &Config{
-		Host:     "localhost",
-		Username: "golang",
-		Password: "secret",
-	}
-	tmpl    = template.Must(template.New("email").Parse(`<h1>Hello, {{.Name}}!</h1><p>This is a sample HTML email content.</p>`))
-	data    = struct{ Name string }{Name: "Bob"}
-	headers = Headers{
+	svc     mail.Service
+	headers = mail.Headers{
 		From:    "john@example.com",
 		To:      "bob@example.com",
 		Subject: "Greeting",
 	}
+	tmpl = template.Must(template.New("email").Parse(`<h1>Hello, {{.Name}}!</h1><p>This is a sample HTML email content.</p>`))
+	data = struct{ Name string }{Name: "Bob"}
 )
 
 func TestMain(m *testing.M) {
-	pool, err := dockertest.NewPool("")
+	dockerPool, err := dockertest.NewPool("")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err = pool.Client.Ping(); err != nil {
+	if err = dockerPool.Client.Ping(); err != nil {
 		log.Fatal(err)
 	}
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+	resource, err := dockerPool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "maildev/maildev",
 		Tag:        "2.1.0",
 		Env: []string{
-			fmt.Sprintf("MAILDEV_INCOMING_USER=%s", cfg.Username),
-			fmt.Sprintf("MAILDEV_INCOMING_PASS=%s", cfg.Password),
+			"MAILDEV_INCOMING_USER=golang",
+			"MAILDEV_INCOMING_PASS=secret",
 			"MAILDEV_DISABLE_WEB=true",
 		},
 	}, func(config *docker.HostConfig) {
@@ -51,14 +47,19 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cfg.Addr = resource.GetHostPort("1025/tcp")
 	resource.Expire(20)
-	pool.MaxWait = 20 * time.Second
-	if err = pool.Retry(func() error { return Ping(cfg) }); err != nil {
+	svc = NewService(&Config{
+		Addr:     resource.GetHostPort("1025/tcp"),
+		Host:     "localhost",
+		Username: "golang",
+		Password: "secret",
+	})
+	dockerPool.MaxWait = 20 * time.Second
+	if err = dockerPool.Retry(svc.Ping); err != nil {
 		log.Fatal(err)
 	}
 	code := m.Run()
-	if err = pool.Purge(resource); err != nil {
+	if err = dockerPool.Purge(resource); err != nil {
 		log.Fatal(err)
 	}
 	os.Exit(code)
@@ -77,7 +78,7 @@ func TestWrite(t *testing.T) {
 }
 
 func TestSend(t *testing.T) {
-	if err := Send(cfg, headers, tmpl, data); err != nil {
+	if err := svc.Send(headers, tmpl, data); err != nil {
 		t.Fatal(err)
 	}
 }
