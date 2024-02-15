@@ -15,12 +15,11 @@ import (
 var (
 	svc     Service
 	headers = Headers{
-		From:    "john@example.com",
-		To:      "bob@example.com",
-		Subject: "Greeting",
-		Date:    time.Time{},
+		From: "john@example.com",
+		To:   "bob@example.com",
+		Date: time.Time{},
 	}
-	tmpl = template.Must(template.New("email").Parse(`<h1>Hello, {{.Name}}!</h1><p>This is a sample HTML email content.</p>`))
+	tmpl = template.Must(template.New("Greeting").Parse(`<h1>Hello, {{.Name}}!</h1><p>This is a sample HTML email content.</p>`))
 	data = struct{ Name string }{Name: "Bob"}
 )
 
@@ -79,7 +78,7 @@ func TestWrite(t *testing.T) {
 }
 
 func TestSend(t *testing.T) {
-	if err := svc.Send(headers.To, headers.Subject, tmpl, data); err != nil {
+	if err := svc.Send(headers.To, tmpl, data); err != nil {
 		t.Fatal(err)
 	}
 }

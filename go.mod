@@ -3,9 +3,11 @@ module github.com/cyberwlodarczyk/auth
 go 1.21.2
 
 require (
+	github.com/awnumar/memguard v0.22.4
 	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21
 	github.com/emersion/go-smtp v0.20.1
 	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.2
 	github.com/ory/dockertest/v3 v3.10.0
 	golang.org/x/crypto v0.18.0
@@ -15,6 +17,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
+	github.com/awnumar/memcall v0.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/containerd/continuity v0.4.3 // indirect
 	github.com/docker/cli v24.0.7+incompatible // indirect

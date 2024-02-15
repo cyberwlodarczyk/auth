@@ -12,10 +12,9 @@ import (
 )
 
 type Headers struct {
-	From    string
-	To      string
-	Subject string
-	Date    time.Time
+	From string
+	To   string
+	Date time.Time
 }
 
 func Write(w io.Writer, headers Headers, tmpl *template.Template, data any) error {
@@ -26,7 +25,7 @@ func Write(w io.Writer, headers Headers, tmpl *template.Template, data any) erro
 	}{
 		{"From", fmt.Sprintf("<%s>", headers.From)},
 		{"To", fmt.Sprintf("<%s>", headers.To)},
-		{"Subject", headers.Subject},
+		{"Subject", tmpl.Name()},
 		{"Date", headers.Date.Format(time.RFC1123)},
 		{"Mime-Version", "1.0"},
 		{"Content-Type", `text/html; charset="utf-8"`},
@@ -58,7 +57,7 @@ type Config struct {
 
 type Service interface {
 	Ping() error
-	Send(string, string, *template.Template, any) error
+	Send(string, *template.Template, any) error
 }
 
 func NewService(cfg *Config) Service {
@@ -84,7 +83,7 @@ func (s *service) Ping() error {
 	return c.Quit()
 }
 
-func (s *service) Send(to, subject string, tmpl *template.Template, data any) error {
+func (s *service) Send(to string, tmpl *template.Template, data any) error {
 	c, err := smtp.Dial(s.cfg.Addr)
 	if err != nil {
 		return err
@@ -113,7 +112,7 @@ func (s *service) Send(to, subject string, tmpl *template.Template, data any) er
 	}
 	if err = Write(
 		wc,
-		Headers{s.cfg.From, to, subject, time.Now()},
+		Headers{s.cfg.From, to, time.Now()},
 		tmpl,
 		data,
 	); err != nil {
