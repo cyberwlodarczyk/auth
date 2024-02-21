@@ -3,6 +3,7 @@ package smtp
 import (
 	"html/template"
 	"log"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -47,9 +48,11 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 	resource.Expire(20)
+	host, port, _ := net.SplitHostPort(resource.GetHostPort("1025/tcp"))
 	svc = NewService(&Config{
-		Addr:     resource.GetHostPort("1025/tcp"),
-		Host:     "localhost",
+		Host:     host,
+		Port:     port,
+		Name:     "localhost",
 		Username: "golang",
 		Password: "secret",
 		From:     headers.From,

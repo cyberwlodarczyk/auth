@@ -6,39 +6,42 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/cyberwlodarczyk/auth/jwt"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 )
 
 type contextKey int
 
 const (
-	contextKeyRequestId contextKey = iota
-	contextKeyRequestTimer
-	contextKeyRequestStatus
-	contextKeyRequestError
-	contextKeyUserId
+	contextKeyRequestID contextKey = iota
+	contextKeyRequestTime
+	contextKeyUserID
 )
 
-func createContextHelpers[T any](key contextKey) (getter func(*http.Request) T, setter func(*http.Request, T) *http.Request) {
-	getter = func(r *http.Request) T {
+func createContextHelpers[T any](key contextKey) (get func(*http.Request) T, is func(*http.Request) bool, set func(*http.Request, T) *http.Request) {
+	get = func(r *http.Request) T {
 		return r.Context().Value(key).(T)
 	}
-	setter = func(r *http.Request, value T) *http.Request {
+	is = func(r *http.Request) bool {
+		_, ok := r.Context().Value(key).(T)
+		return ok
+	}
+	set = func(r *http.Request, value T) *http.Request {
 		return r.WithContext(context.WithValue(r.Context(), key, value))
 	}
 	return
 }
 
 var (
-	getRequestID, setRequestID         = createContextHelpers[string](contextKeyRequestId)
-	getRequestTime, setRequestTime     = createContextHelpers[time.Time](contextKeyRequestTimer)
-	getRequestStatus, setRequestStatus = createContextHelpers[int](contextKeyRequestStatus)
-	getRequestError, setRequestError   = createContextHelpers[error](contextKeyRequestError)
-	getUserID, setUserID               = createContextHelpers[int64](contextKeyUserId)
+	getRequestID, isRequestID, setRequestID       = createContextHelpers[string](contextKeyRequestID)
+	getRequestTime, isRequestTime, setRequestTime = createContextHelpers[time.Time](contextKeyRequestTime)
+	getUserID, isUserID, setUserID                = createContextHelpers[int64](contextKeyUserID)
 )
 
 type message struct {
@@ -60,6 +63,8 @@ func (e *operationalError) Error() string {
 }
 
 var (
+	errNotFound          = &operationalError{http.StatusNotFound, "resource could not be found"}
+	errMethodNotAllowed  = &operationalError{http.StatusMethodNotAllowed, "specified method is not allowed for this resource"}
 	errExceededBodyLimit = &operationalError{http.StatusRequestEntityTooLarge, "request body limit has been exceeded"}
 	errMalformedBody     = &operationalError{http.StatusBadRequest, "request body is invalid or malformed"}
 	errBadBodyEncoding   = &operationalError{http.StatusUnsupportedMediaType, "request body encoding should be json"}
@@ -100,35 +105,76 @@ func decodeJSONBody(r *http.Request, v any) error {
 	return nil
 }
 
-func createHandler(f func(w http.ResponseWriter, r *http.Request) (response, error)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func reply(w http.ResponseWriter, r *http.Request, res response, err error) {
+	if err != nil {
+		var operationalErr *operationalError
+		if errors.As(err, &operationalErr) {
+			res = response{
+				operationalErr.status,
+				message{operationalErr.message},
+			}
+		} else {
+			res = response{
+				http.StatusInternalServerError,
+				message{"something went wrong"},
+			}
+		}
+	}
+	level := logrus.InfoLevel
+	if res.status >= 500 {
+		level = logrus.ErrorLevel
+	} else if res.status >= 400 {
+		level = logrus.WarnLevel
+	}
+	if res.payload != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(res.status)
+		if encodeErr := json.NewEncoder(w).Encode(res.payload); encodeErr != nil {
+			err = errors.Join(err, encodeErr)
+			level = logrus.ErrorLevel
+		}
+	} else {
+		w.WriteHeader(res.status)
+	}
+	fields := logrus.Fields{
+		"ip":     strings.Split(r.RemoteAddr, ":")[0],
+		"method": r.Method,
+		"path":   r.URL.EscapedPath(),
+		"status": res.status,
+	}
+	if isRequestID(r) {
+		fields["id"] = getRequestID(r)
+	}
+	if isRequestTime(r) {
+		fields["duration"] = time.Since(getRequestTime(r))
+	}
+	if isUserID(r) {
+		fields["userId"] = getUserID(r)
+	}
+	logger := logrus.WithFields(fields)
+	if level >= logrus.InfoLevel {
+		logger.Logger.Out = os.Stdout
+		logger.Log(level)
+	} else {
+		logger.Log(level, err)
+	}
+}
+
+func createMiddleware(f func(h http.Handler, w http.ResponseWriter, r *http.Request) error) func(http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := f(h, w, r); err != nil {
+				reply(w, r, response{}, err)
+			}
+		})
+	}
+}
+
+func createHandler(f func(w http.ResponseWriter, r *http.Request) (response, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		res, err := f(w, r)
-		if err != nil {
-			var operationalErr *operationalError
-			if errors.As(err, &operationalErr) {
-				res = response{
-					operationalErr.status,
-					message{operationalErr.message},
-				}
-			} else {
-				res = response{
-					http.StatusInternalServerError,
-					message{"something went wrong"},
-				}
-			}
-		}
-		if res.status != 0 {
-			if res.payload != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(res.status)
-				err = errors.Join(err, json.NewEncoder(w).Encode(res.payload))
-			} else {
-				w.WriteHeader(res.status)
-			}
-			setRequestStatus(r, res.status)
-			setRequestError(r, err)
-		}
-	})
+		reply(w, r, res, err)
+	}
 }
 
 func isJWTErrorOperational(err error) bool {
@@ -138,59 +184,50 @@ func isJWTErrorOperational(err error) bool {
 		errors.Is(err, jwt.ErrMissingExpiration)
 }
 
-type RequestLog struct {
-	Addr     string
-	Method   string
-	Path     string
-	Status   int
-	Id       string
-	Error    error
-	Time     time.Time
-	Duration time.Duration
+func notFound() http.HandlerFunc {
+	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+		err = errNotFound
+		return
+	})
 }
 
-func WithRequestLogger(f func(RequestLog)) func(http.Handler) http.Handler {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-			log := RequestLog{
-				Addr:   r.RemoteAddr,
-				Method: r.Method,
-				Path:   r.URL.EscapedPath(),
-				Status: getRequestStatus(r),
-				Id:     getRequestID(r),
-				Error:  getRequestError(r),
-				Time:   getRequestTime(r),
-			}
-			log.Duration = time.Since(log.Time)
-			f(log)
-		})
-	}
+func methodNotAllowed() http.HandlerFunc {
+	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+		err = errMethodNotAllowed
+		return
+	})
 }
 
-func WithRequestTime() func(http.Handler) http.Handler {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, setRequestTime(r, time.Now()))
-		})
-	}
+func withRequestID(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := uuid.New().String()
+		w.Header().Add("X-Request-ID", id)
+		h.ServeHTTP(w, setRequestID(r, id))
+	})
 }
 
-func WithRequestID() func(http.Handler) http.Handler {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			id := uuid.New().String()
-			w.Header().Add("X-Request-ID", id)
-			h.ServeHTTP(w, setRequestID(r, id))
-		})
-	}
+func withRequestTime(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, setRequestTime(r, time.Now()))
+	})
 }
 
-func WithBodyLimit(bytes int64) func(http.Handler) http.Handler {
+func withBodyLimit(bytes int64) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.Body = http.MaxBytesReader(w, r.Body, bytes)
 			h.ServeHTTP(w, r)
 		})
 	}
+}
+
+func New(user *User) http.Handler {
+	r := chi.NewRouter()
+	r.Use(withRequestID)
+	r.Use(withRequestTime)
+	r.Use(withBodyLimit(1 << 12))
+	r.NotFound(notFound())
+	r.MethodNotAllowed(methodNotAllowed())
+	r.Mount("/user", user.router())
+	return r
 }
