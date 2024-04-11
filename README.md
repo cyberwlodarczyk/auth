@@ -12,7 +12,6 @@ This is an http server that handles crucial user security procedures such as:
 ## Todos
 
 - Rate limiting
-- SMTP wait group
 - `memguard` package utilization
 - HTTP handler tests
 

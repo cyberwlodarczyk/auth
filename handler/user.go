@@ -152,7 +152,7 @@ func (u *User) createConfirmationToken() http.HandlerFunc {
 		if err != nil {
 			return
 		}
-		go u.Mail.Send(body.Email, u.ConfirmatonTmpl, token)
+		u.Mail.Send(body.Email, u.ConfirmatonTmpl, token)
 		res = response{http.StatusNoContent, nil}
 		return
 	})
@@ -221,7 +221,7 @@ func (u *User) createPasswordResetToken() http.HandlerFunc {
 		if err != nil {
 			return
 		}
-		go u.Mail.Send(
+		u.Mail.Send(
 			body.Email,
 			u.PasswordResetTmpl,
 			token,
@@ -259,7 +259,7 @@ func (u *User) createSudoToken() http.HandlerFunc {
 		if err != nil {
 			return
 		}
-		go u.Mail.Send(user.Email, u.SudoTmpl, token)
+		u.Mail.Send(user.Email, u.SudoTmpl, token)
 		res = response{http.StatusCreated, nil}
 		return
 	})

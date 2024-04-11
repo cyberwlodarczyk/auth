@@ -1,6 +1,7 @@
 package smtp
 
 import (
+	"bytes"
 	"html/template"
 	"log"
 	"net"
@@ -14,8 +15,9 @@ import (
 )
 
 var (
-	svc     Service
-	headers = Headers{
+	errorLog bytes.Buffer
+	svc      Service
+	headers  = Headers{
 		From: "john@example.com",
 		To:   "bob@example.com",
 		Date: time.Time{},
@@ -56,6 +58,7 @@ func TestMain(m *testing.M) {
 		Username: "golang",
 		Password: "secret",
 		From:     headers.From,
+		ErrorLog: log.New(&errorLog, "", 0),
 	})
 	pool.MaxWait = 20 * time.Second
 	if err = pool.Retry(svc.Ping); err != nil {
@@ -81,7 +84,9 @@ func TestWrite(t *testing.T) {
 }
 
 func TestSend(t *testing.T) {
-	if err := svc.Send(headers.To, tmpl, data); err != nil {
-		t.Fatal(err)
+	svc.Send(headers.To, tmpl, data)
+	svc.Close()
+	if errorLog.Len() != 0 {
+		t.Fatal(errorLog.String())
 	}
 }

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/emersion/go-sasl"
@@ -54,20 +56,26 @@ type Config struct {
 	Username  string
 	Password  string
 	From      string
+	ErrorLog  *log.Logger
 	TLSConfig *tls.Config
 }
 
 type Service interface {
 	Ping() error
-	Send(string, *template.Template, any) error
+	Send(to string, tmpl *template.Template, data any)
+	Close()
 }
 
 func NewService(cfg *Config) Service {
+	if cfg.ErrorLog == nil {
+		cfg.ErrorLog = log.Default()
+	}
 	return &service{
 		addr:      net.JoinHostPort(cfg.Host, cfg.Port),
 		auth:      sasl.NewPlainClient("", cfg.Username, cfg.Password),
 		name:      cfg.Name,
 		from:      cfg.From,
+		errorLog:  cfg.ErrorLog,
 		tlsConfig: cfg.TLSConfig,
 	}
 }
@@ -78,6 +86,8 @@ type service struct {
 	name      string
 	from      string
 	tlsConfig *tls.Config
+	errorLog  *log.Logger
+	wg        sync.WaitGroup
 }
 
 func (s *service) Ping() error {
@@ -95,7 +105,7 @@ func (s *service) Ping() error {
 	return c.Quit()
 }
 
-func (s *service) Send(to string, tmpl *template.Template, data any) error {
+func (s *service) send(to string, tmpl *template.Template, data any) error {
 	c, err := smtp.Dial(s.addr)
 	if err != nil {
 		return err
@@ -134,4 +144,18 @@ func (s *service) Send(to string, tmpl *template.Template, data any) error {
 		return err
 	}
 	return c.Quit()
+}
+
+func (s *service) Send(to string, tmpl *template.Template, data any) {
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		if err := s.send(to, tmpl, data); err != nil {
+			s.errorLog.Print(err)
+		}
+	}()
+}
+
+func (s *service) Close() {
+	s.wg.Wait()
 }

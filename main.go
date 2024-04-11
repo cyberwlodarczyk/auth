@@ -95,17 +95,22 @@ func run(cfg *config) error {
 	if err != nil {
 		return err
 	}
+	errorWriter := logrus.StandardLogger().WriterLevel(logrus.ErrorLevel)
+	defer errorWriter.Close()
+	mail := smtp.NewService(&smtp.Config{
+		Host:      cfg.SMTP.Host,
+		Port:      cfg.SMTP.Port,
+		Name:      cfg.SMTP.Name,
+		Username:  cfg.SMTP.Username,
+		Password:  cfg.SMTP.Password,
+		From:      cfg.SMTP.From,
+		ErrorLog:  log.New(errorWriter, "", 0),
+		TLSConfig: &tls.Config{ServerName: cfg.SMTP.Host},
+	})
+	defer mail.Close()
 	user := &handler.User{
-		DB: userDB,
-		Mail: smtp.NewService(&smtp.Config{
-			Host:      cfg.SMTP.Host,
-			Port:      cfg.SMTP.Port,
-			Name:      cfg.SMTP.Name,
-			Username:  cfg.SMTP.Username,
-			Password:  cfg.SMTP.Password,
-			From:      cfg.SMTP.From,
-			TLSConfig: &tls.Config{ServerName: cfg.SMTP.Host},
-		}),
+		DB:   userDB,
+		Mail: mail,
 		ConfirmationToken: jwt.NewService[handler.UserConfirmationToken](
 			cfg.JWT.ConfirmationSecret,
 			15*time.Minute,
@@ -130,8 +135,6 @@ func run(cfg *config) error {
 		EmailValidation:    validation.NewEmailService(validation.DefaultEmailPattern),
 		PasswordValidation: validation.NewPasswordService(validation.DefaultPasswordConfig),
 	}
-	errorWriter := logrus.StandardLogger().WriterLevel(logrus.ErrorLevel)
-	defer errorWriter.Close()
 	server := &http.Server{
 		Addr:           net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port),
 		Handler:        handler.New(user),
