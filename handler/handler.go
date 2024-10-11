@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/cyberwlodarczyk/auth/jwt"
-	"github.com/go-chi/chi/v5"
+	"github.com/cyberwlodarczyk/auth/ratelimit"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
@@ -68,6 +69,7 @@ var (
 	errExceededBodyLimit = &operationalError{http.StatusRequestEntityTooLarge, "request body limit has been exceeded"}
 	errMalformedBody     = &operationalError{http.StatusBadRequest, "request body is invalid or malformed"}
 	errBadBodyEncoding   = &operationalError{http.StatusUnsupportedMediaType, "request body encoding should be json"}
+	errTooManyRequests   = &operationalError{http.StatusTooManyRequests, "request rate limit has been exceeded"}
 )
 
 func decodeJSONBody(r *http.Request, v any) error {
@@ -184,21 +186,21 @@ func isJWTErrorOperational(err error) bool {
 		errors.Is(err, jwt.ErrMissingExpiration)
 }
 
-func notFound() http.HandlerFunc {
+func NotFound() http.HandlerFunc {
 	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		err = errNotFound
 		return
 	})
 }
 
-func methodNotAllowed() http.HandlerFunc {
+func MethodNotAllowed() http.HandlerFunc {
 	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		err = errMethodNotAllowed
 		return
 	})
 }
 
-func withRequestID(h http.Handler) http.Handler {
+func WithRequestID(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := uuid.New().String()
 		w.Header().Add("X-Request-ID", id)
@@ -206,13 +208,13 @@ func withRequestID(h http.Handler) http.Handler {
 	})
 }
 
-func withRequestTime(h http.Handler) http.Handler {
+func WithRequestTime(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, setRequestTime(r, time.Now()))
 	})
 }
 
-func withBodyLimit(bytes int64) func(http.Handler) http.Handler {
+func WithBodyLimit(bytes int64) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.Body = http.MaxBytesReader(w, r.Body, bytes)
@@ -221,13 +223,16 @@ func withBodyLimit(bytes int64) func(http.Handler) http.Handler {
 	}
 }
 
-func New(user *User) http.Handler {
-	r := chi.NewRouter()
-	r.Use(withRequestID)
-	r.Use(withRequestTime)
-	r.Use(withBodyLimit(1 << 12))
-	r.NotFound(notFound())
-	r.MethodNotAllowed(methodNotAllowed())
-	r.Mount("/user", user.router())
-	return r
+func WithRateLimit(limiter ratelimit.Limiter) func(http.Handler) http.Handler {
+	return createMiddleware(func(h http.Handler, w http.ResponseWriter, r *http.Request) error {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			return err
+		}
+		if !limiter.Allow(ip) {
+			return errTooManyRequests
+		}
+		h.ServeHTTP(w, r)
+		return nil
+	})
 }

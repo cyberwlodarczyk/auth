@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"html/template"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,9 +15,9 @@ import (
 	"github.com/cyberwlodarczyk/auth/argon2id"
 	"github.com/cyberwlodarczyk/auth/jwt"
 	"github.com/cyberwlodarczyk/auth/postgres"
+	"github.com/cyberwlodarczyk/auth/ratelimit"
 	"github.com/cyberwlodarczyk/auth/smtp"
 	"github.com/cyberwlodarczyk/auth/validation"
-	"github.com/go-chi/chi/v5"
 )
 
 var (
@@ -63,24 +65,6 @@ func isUserNotFound(err error) error {
 	return err
 }
 
-func withUserSession(svc jwt.Service[UserSessionToken]) func(http.Handler) http.Handler {
-	return createMiddleware(func(h http.Handler, w http.ResponseWriter, r *http.Request) error {
-		header := strings.Split(r.Header.Get("Authorization"), " ")
-		if len(header) != 2 || header[0] != "Bearer" {
-			return errMissingUserSession
-		}
-		token, err := svc.Verify(header[1])
-		if err != nil {
-			if isJWTErrorOperational(err) {
-				return errBadUserSession
-			}
-			return err
-		}
-		h.ServeHTTP(w, setUserID(r, token.Id))
-		return nil
-	})
-}
-
 type UserConfirmationToken struct {
 	Email string `json:"email"`
 }
@@ -100,42 +84,34 @@ type User struct {
 	SessionToken       jwt.Service[UserSessionToken]
 	SudoToken          jwt.Service[UserSessionToken]
 	PasswordResetToken jwt.Service[UserPasswordResetToken]
-	ConfirmatonTmpl    *template.Template
-	SudoTmpl           *template.Template
-	PasswordResetTmpl  *template.Template
 	Password           argon2id.Service
 	NameValidation     validation.Service[string]
 	EmailValidation    validation.Service[string]
 	PasswordValidation validation.Service[[]byte]
 }
 
-func (u *User) router() http.Handler {
-	r := chi.NewRouter()
-	session := withUserSession(u.SessionToken)
-	sudo := withUserSession(u.SudoToken)
-	r.Post("/", u.create())
-	r.Post("/password-reset", u.resetPassword())
-	r.Group(func(r chi.Router) {
-		r.Use(session)
-		r.Get("/", u.get())
-		r.Put("/name", u.editName())
-		r.Put("/password", u.editPassword())
+func (u *User) WithSession(svc jwt.Service[UserSessionToken], limiter ratelimit.Limiter) func(http.Handler) http.Handler {
+	return createMiddleware(func(h http.Handler, w http.ResponseWriter, r *http.Request) error {
+		header := strings.Split(r.Header.Get("Authorization"), " ")
+		if len(header) != 2 || header[0] != "Bearer" {
+			return errMissingUserSession
+		}
+		token, err := svc.Verify(header[1])
+		if err != nil {
+			if isJWTErrorOperational(err) {
+				return errBadUserSession
+			}
+			return err
+		}
+		if !limiter.Allow(strconv.FormatInt(token.Id, 16)) {
+			return errTooManyRequests
+		}
+		h.ServeHTTP(w, setUserID(r, token.Id))
+		return nil
 	})
-	r.Group(func(r chi.Router) {
-		r.Use(sudo)
-		r.Put("/email", u.editEmail())
-		r.Delete("/", u.delete())
-	})
-	r.Route("/token", func(r chi.Router) {
-		r.Post("/confirmation", u.createConfirmationToken())
-		r.Post("/session", u.createSessionToken())
-		r.Post("/password-reset", u.createPasswordResetToken())
-		r.With(session).Post("/sudo", u.createSudoToken())
-	})
-	return r
 }
 
-func (u *User) createConfirmationToken() http.HandlerFunc {
+func (u *User) CreateConfirmationToken(tmpl *template.Template, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email string `json:"email"`
 	}
@@ -148,17 +124,21 @@ func (u *User) createConfirmationToken() http.HandlerFunc {
 			err = errBadUserEmail
 			return
 		}
+		if !limiter.Allow(body.Email) {
+			err = errTooManyRequests
+			return
+		}
 		token, err := u.ConfirmationToken.Sign(UserConfirmationToken(body))
 		if err != nil {
 			return
 		}
-		u.Mail.Send(body.Email, u.ConfirmatonTmpl, token)
+		u.Mail.Send(body.Email, tmpl, token)
 		res = response{http.StatusNoContent, nil}
 		return
 	})
 }
 
-func (u *User) createSessionToken() http.HandlerFunc {
+func (u *User) CreateSessionToken(ipLimiter ratelimit.Limiter, emailLimiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email    string       `json:"email"`
 		Password userPassword `json:"password"`
@@ -172,6 +152,18 @@ func (u *User) createSessionToken() http.HandlerFunc {
 			return
 		}
 		defer memguard.WipeBytes(body.Password)
+		if !u.EmailValidation.Check(body.Email) {
+			err = errBadUserEmail
+			return
+		}
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			return
+		}
+		if !ipLimiter.Allow(ip) || !emailLimiter.Allow(body.Email) {
+			err = errTooManyRequests
+			return
+		}
 		user, err := u.DB.GetByEmail(r.Context(), body.Email)
 		if err != nil {
 			if errors.Is(err, postgres.ErrNotFound) {
@@ -196,7 +188,7 @@ func (u *User) createSessionToken() http.HandlerFunc {
 	})
 }
 
-func (u *User) createPasswordResetToken() http.HandlerFunc {
+func (u *User) CreatePasswordResetToken(tmpl *template.Template, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email string `json:"email"`
 	}
@@ -207,6 +199,10 @@ func (u *User) createPasswordResetToken() http.HandlerFunc {
 		}
 		if !u.EmailValidation.Check(body.Email) {
 			err = errBadUserEmail
+			return
+		}
+		if !limiter.Allow(body.Email) {
+			err = errTooManyRequests
 			return
 		}
 		user, err := u.DB.GetByEmail(r.Context(), body.Email)
@@ -221,17 +217,13 @@ func (u *User) createPasswordResetToken() http.HandlerFunc {
 		if err != nil {
 			return
 		}
-		u.Mail.Send(
-			body.Email,
-			u.PasswordResetTmpl,
-			token,
-		)
+		u.Mail.Send(body.Email, tmpl, token)
 		res = response{http.StatusNoContent, nil}
 		return
 	})
 }
 
-func (u *User) createSudoToken() http.HandlerFunc {
+func (u *User) CreateSudoToken(tmpl *template.Template, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Password userPassword `json:"password"`
 	}
@@ -255,17 +247,21 @@ func (u *User) createSudoToken() http.HandlerFunc {
 			err = errInvalidUserPassword
 			return
 		}
+		if !limiter.Allow(strconv.FormatInt(id, 16)) {
+			err = errTooManyRequests
+			return
+		}
 		token, err := u.SudoToken.Sign(UserSessionToken{id})
 		if err != nil {
 			return
 		}
-		u.Mail.Send(user.Email, u.SudoTmpl, token)
+		u.Mail.Send(user.Email, tmpl, token)
 		res = response{http.StatusCreated, nil}
 		return
 	})
 }
 
-func (u *User) get() http.HandlerFunc {
+func (u *User) Get() http.HandlerFunc {
 	type payload struct {
 		Id        int64     `json:"id"`
 		Email     string    `json:"email"`
@@ -291,7 +287,7 @@ func (u *User) get() http.HandlerFunc {
 	})
 }
 
-func (u *User) create() http.HandlerFunc {
+func (u *User) Create(limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Token    string       `json:"token"`
 		Name     string       `json:"name"`
@@ -320,6 +316,14 @@ func (u *User) create() http.HandlerFunc {
 			err = errBadUserPassword
 			return
 		}
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			return
+		}
+		if !limiter.Allow(ip) {
+			err = errTooManyRequests
+			return
+		}
 		hash, err := u.Password.Hash(body.Password)
 		if err != nil {
 			return
@@ -341,7 +345,7 @@ func (u *User) create() http.HandlerFunc {
 	})
 }
 
-func (u *User) editEmail() http.HandlerFunc {
+func (u *User) EditEmail() http.HandlerFunc {
 	type body struct {
 		Token string `json:"token"`
 	}
@@ -365,7 +369,7 @@ func (u *User) editEmail() http.HandlerFunc {
 	})
 }
 
-func (u *User) editName() http.HandlerFunc {
+func (u *User) EditName() http.HandlerFunc {
 	type body struct {
 		Name string `json:"name"`
 	}
@@ -388,7 +392,7 @@ func (u *User) editName() http.HandlerFunc {
 	})
 }
 
-func (u *User) editPassword() http.HandlerFunc {
+func (u *User) EditPassword() http.HandlerFunc {
 	type body struct {
 		Password    userPassword `json:"password"`
 		NewPassword userPassword `json:"newPassword"`
@@ -431,7 +435,7 @@ func (u *User) editPassword() http.HandlerFunc {
 	})
 }
 
-func (u *User) resetPassword() http.HandlerFunc {
+func (u *User) ResetPassword(limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Token    string       `json:"token"`
 		Password userPassword `json:"password"`
@@ -451,6 +455,10 @@ func (u *User) resetPassword() http.HandlerFunc {
 			err = isBadUserToken(err)
 			return
 		}
+		if !limiter.Allow(strconv.FormatInt(token.Id, 16)) {
+			err = errTooManyRequests
+			return
+		}
 		hash, err := u.Password.Hash(body.Password)
 		if err != nil {
 			return
@@ -465,7 +473,7 @@ func (u *User) resetPassword() http.HandlerFunc {
 	})
 }
 
-func (u *User) delete() http.HandlerFunc {
+func (u *User) Delete() http.HandlerFunc {
 	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		if err = u.DB.Delete(r.Context(), getUserID(r)); err != nil {
 			err = isUserNotFound(err)

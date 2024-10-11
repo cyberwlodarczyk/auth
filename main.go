@@ -20,8 +20,10 @@ import (
 	"github.com/cyberwlodarczyk/auth/handler"
 	"github.com/cyberwlodarczyk/auth/jwt"
 	"github.com/cyberwlodarczyk/auth/postgres"
+	"github.com/cyberwlodarczyk/auth/ratelimit"
 	"github.com/cyberwlodarczyk/auth/smtp"
 	"github.com/cyberwlodarczyk/auth/validation"
+	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
 )
 
@@ -127,17 +129,76 @@ func run(cfg *config) error {
 			cfg.JWT.PasswordResetSecret,
 			15*time.Minute,
 		),
-		ConfirmatonTmpl:    createUserTokenTmpl("Email confirmation", "Confirm your email"),
-		SudoTmpl:           createUserTokenTmpl("Performing sensitive action", "Perform sensitive action"),
-		PasswordResetTmpl:  createUserTokenTmpl("Password reset", "Reset your password"),
 		Password:           argon2id.NewService(argon2id.DefaultParams),
 		NameValidation:     validation.NewMinMaxService(1, 1000),
 		EmailValidation:    validation.NewEmailService(validation.DefaultEmailPattern),
 		PasswordValidation: validation.NewPasswordService(validation.DefaultPasswordConfig),
 	}
+	rl := ratelimit.NewService(time.Minute, 3*time.Minute)
+	defer rl.Close()
+	r := chi.NewRouter()
+	r.Use(handler.WithRequestID)
+	r.Use(handler.WithRequestID)
+	r.Use(handler.WithRateLimit(rl.NewLimiter(100, 1000)))
+	r.Use(handler.WithBodyLimit(1 << 12))
+	r.NotFound(handler.NotFound())
+	r.MethodNotAllowed(handler.MethodNotAllowed())
+	r.Route("/user", func(r chi.Router) {
+		session := user.WithSession(user.SessionToken, rl.NewLimiter(5, 25))
+		sudo := user.WithSession(user.SudoToken, rl.NewLimiter(1, 5))
+		r.Post("/", user.Create(rl.NewLimiter(5, 25)))
+		r.Post("/password-reset", user.ResetPassword(rl.NewLimiter(1, 5)))
+		r.Group(func(r chi.Router) {
+			r.Use(session)
+			r.Get("/", user.Get())
+			r.Put("/name", user.EditName())
+			r.Put("/password", user.EditPassword())
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(sudo)
+			r.Put("/email", user.EditEmail())
+			r.Delete("/", user.Delete())
+		})
+		r.Route("/token", func(r chi.Router) {
+			r.Post(
+				"/confirmation",
+				user.CreateConfirmationToken(
+					createUserTokenTmpl(
+						"Email confirmation",
+						"Confirm your email",
+					),
+					rl.NewLimiter(1.0/(15*60), 2),
+				),
+			)
+			r.Post("/session", user.CreateSessionToken(
+				rl.NewLimiter(10, 50),
+				rl.NewLimiter(1, 5),
+			))
+			r.Post(
+				"/password-reset",
+				user.CreatePasswordResetToken(
+					createUserTokenTmpl(
+						"Password reset",
+						"Reset your password",
+					),
+					rl.NewLimiter(1.0/(15*60), 2),
+				),
+			)
+			r.With(session).Post(
+				"/sudo",
+				user.CreateSudoToken(
+					createUserTokenTmpl(
+						"Performing sensitive action",
+						"Perform sensitive action",
+					),
+					rl.NewLimiter(1.0/(5*60), 2),
+				),
+			)
+		})
+	})
 	server := &http.Server{
 		Addr:           net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port),
-		Handler:        handler.New(user),
+		Handler:        r,
 		TLSConfig:      &tls.Config{MinVersion: tls.VersionTLS13},
 		ReadTimeout:    1 * time.Second,
 		WriteTimeout:   1 * time.Second,
