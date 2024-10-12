@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	pool.MaxWait = 20 * time.Second
 	ctx := context.Background()
 	if err = pool.Retry(func() error {
-		svc, err = NewService(ctx, fmt.Sprintf("postgres://golang:secret@%s/test?sslmode=disable", resource.GetHostPort("5432/tcp")))
+		svc, err = NewService(ctx, Config{fmt.Sprintf("postgres://golang:secret@%s/test?sslmode=disable", resource.GetHostPort("5432/tcp"))})
 		if err != nil {
 			return err
 		}

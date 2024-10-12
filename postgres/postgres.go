@@ -6,13 +6,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type Config struct {
+	URI string `env:"URI"`
+}
+
 type Service interface {
 	Ping(context.Context) error
 	Close()
 }
 
-func NewService(ctx context.Context, uri string) (Service, error) {
-	pool, err := pgxpool.New(ctx, uri)
+func NewService(ctx context.Context, cfg Config) (Service, error) {
+	pool, err := pgxpool.New(ctx, cfg.URI)
 	if err != nil {
 		return nil, err
 	}

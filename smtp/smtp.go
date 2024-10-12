@@ -50,12 +50,12 @@ func Write(w io.Writer, headers Headers, tmpl *template.Template, data any) erro
 }
 
 type Config struct {
-	Host      string
-	Port      string
-	Name      string
-	Username  string
-	Password  string
-	From      string
+	Host      string `env:"HOST"`
+	Port      string `env:"PORT"`
+	Username  string `env:"USERNAME"`
+	Password  string `env:"PASSWORD"`
+	Name      string `yaml:"name"`
+	From      string `yaml:"from"`
 	ErrorLog  *log.Logger
 	TLSConfig *tls.Config
 }

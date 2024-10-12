@@ -7,8 +7,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type Params struct {
+	Rate  float64 `yaml:"rate"`
+	Burst int     `yaml:"burst"`
+}
+
 type Service interface {
-	NewLimiter(frequency float64, burst int) Limiter
+	NewLimiter(Params) Limiter
 	Close()
 }
 
@@ -29,13 +34,12 @@ type service struct {
 	mutex    sync.Mutex
 }
 
-func (s *service) NewLimiter(frequency float64, burst int) Limiter {
+func (s *service) NewLimiter(p Params) Limiter {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	l := &limiter{
-		entries:   make(map[string]*entry),
-		frequency: frequency,
-		burst:     burst,
+		entries: make(map[string]*entry),
+		params:  p,
 	}
 	s.limiters = append(s.limiters, l)
 	return l
@@ -74,10 +78,9 @@ type Limiter interface {
 }
 
 type limiter struct {
-	entries   map[string]*entry
-	frequency float64
-	burst     int
-	mutex     sync.Mutex
+	entries map[string]*entry
+	params  Params
+	mutex   sync.Mutex
 }
 
 type entry struct {
@@ -90,7 +93,7 @@ func (l *limiter) Allow(key string) bool {
 	defer l.mutex.Unlock()
 	e, ok := l.entries[key]
 	if !ok {
-		limiter := rate.NewLimiter(rate.Limit(l.frequency), l.burst)
+		limiter := rate.NewLimiter(rate.Limit(l.params.Rate), l.params.Burst)
 		l.entries[key] = &entry{limiter, time.Now()}
 		return limiter.Allow()
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"net"
 	"net/http"
@@ -77,6 +78,26 @@ type UserSessionToken struct {
 	Id int64 `json:"id"`
 }
 
+type UserTokenMail struct {
+	Heading string `yaml:"heading"`
+	Action  string `yaml:"action"`
+}
+
+func (m UserTokenMail) createTmpl() *template.Template {
+	text := strings.ReplaceAll(
+		fmt.Sprintf(`<h1>%s</h1>
+<p>To %s, please use the following token:</p>
+<p><strong>{{.}}</strong></p>
+<p><em>Security Notice:</em> Please do not share this token with anyone else. It is confidential and should be kept private.</p>`,
+			m.Heading,
+			strings.ToLower(m.Action),
+		),
+		"\n",
+		"",
+	)
+	return template.Must(template.New(m.Action).Parse(text))
+}
+
 type User struct {
 	DB                 postgres.UserService
 	Mail               smtp.Service
@@ -111,10 +132,11 @@ func (u *User) WithSession(svc jwt.Service[UserSessionToken], limiter ratelimit.
 	})
 }
 
-func (u *User) CreateConfirmationToken(tmpl *template.Template, limiter ratelimit.Limiter) http.HandlerFunc {
+func (u *User) CreateConfirmationToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email string `json:"email"`
 	}
+	tmpl := mail.createTmpl()
 	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
 		if err = decodeJSONBody(r, &body); err != nil {
@@ -188,10 +210,11 @@ func (u *User) CreateSessionToken(ipLimiter ratelimit.Limiter, emailLimiter rate
 	})
 }
 
-func (u *User) CreatePasswordResetToken(tmpl *template.Template, limiter ratelimit.Limiter) http.HandlerFunc {
+func (u *User) CreatePasswordResetToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email string `json:"email"`
 	}
+	tmpl := mail.createTmpl()
 	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
 		if err = decodeJSONBody(r, &body); err != nil {
@@ -223,10 +246,11 @@ func (u *User) CreatePasswordResetToken(tmpl *template.Template, limiter ratelim
 	})
 }
 
-func (u *User) CreateSudoToken(tmpl *template.Template, limiter ratelimit.Limiter) http.HandlerFunc {
+func (u *User) CreateSudoToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Password userPassword `json:"password"`
 	}
+	tmpl := mail.createTmpl()
 	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
 		if err = decodeJSONBody(r, &body); err != nil {

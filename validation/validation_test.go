@@ -45,7 +45,7 @@ func TestEmailService(t *testing.T) {
 }
 
 func TestMinMaxService(t *testing.T) {
-	svc := NewMinMaxService(1, 10)
+	svc := NewMinMaxService(Range{1, 10})
 	tests := []struct {
 		value string
 		valid bool

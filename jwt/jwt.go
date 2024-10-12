@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"encoding/base64"
 	"errors"
 	"time"
 
@@ -19,9 +20,25 @@ var (
 	ErrExceededExpiration = errors.New("jwt: exceeded expiration")
 )
 
+type Secret []byte
+
+func (s *Secret) UnmarshalText(src []byte) error {
+	b, err := base64.RawStdEncoding.DecodeString(string(src))
+	if err != nil {
+		return err
+	}
+	*s = b
+	return nil
+}
+
 type claims[T any] struct {
 	Data T `json:"data"`
 	jwt.RegisteredClaims
+}
+
+type Config struct {
+	Secret Secret        `env:"SECRET"`
+	Age    time.Duration `yaml:"age"`
 }
 
 type Service[T any] interface {
@@ -29,8 +46,8 @@ type Service[T any] interface {
 	Verify(string) (T, error)
 }
 
-func NewService[T any](key []byte, age time.Duration) Service[T] {
-	return &service[T]{key, age}
+func NewService[T any](cfg Config) Service[T] {
+	return &service[T]{cfg.Secret, cfg.Age}
 }
 
 type service[T any] struct {

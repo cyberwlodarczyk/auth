@@ -3,20 +3,16 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/base64"
-	"fmt"
-	"html/template"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/caarlos0/env/v10"
 	"github.com/cyberwlodarczyk/auth/argon2id"
+	"github.com/cyberwlodarczyk/auth/config"
 	"github.com/cyberwlodarczyk/auth/handler"
 	"github.com/cyberwlodarczyk/auth/jwt"
 	"github.com/cyberwlodarczyk/auth/postgres"
@@ -27,68 +23,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type secret []byte
-
-func (s *secret) UnmarshalText(src []byte) error {
-	b, err := base64.RawStdEncoding.DecodeString(string(src))
-	if err != nil {
-		return err
-	}
-	*s = b
-	return nil
-}
-
-type httpConfig struct {
-	Host    string `env:"HOST"`
-	Port    string `env:"PORT"`
-	TLSCert string `env:"TLS_CERT"`
-	TLSKey  string `env:"TLS_KEY"`
-}
-
-type postgresConfig struct {
-	URI string `env:"URI"`
-}
-
-type jwtConfig struct {
-	ConfirmationSecret  secret `env:"CONFIRMATION_SECRET"`
-	SessionSecret       secret `env:"SESSION_SECRET"`
-	PasswordResetSecret secret `env:"PASSWORD_RESET_SECRET"`
-	SudoSecret          secret `env:"SUDO_SECRET"`
-}
-
-type smtpConfig struct {
-	Host     string `env:"HOST"`
-	Port     string `env:"PORT"`
-	Name     string `env:"NAME"`
-	Username string `env:"USERNAME"`
-	Password string `env:"PASSWORD"`
-	From     string `env:"FROM"`
-}
-
-type config struct {
-	HTTP     httpConfig     `envPrefix:"HTTP_"`
-	Postgres postgresConfig `envPrefix:"POSTGRES_"`
-	JWT      jwtConfig      `envPrefix:"JWT_"`
-	SMTP     smtpConfig     `envPrefix:"SMTP_"`
-}
-
-func createUserTokenTmpl(heading, action string) *template.Template {
-	text := strings.ReplaceAll(
-		fmt.Sprintf(`<h1>%s</h1>
-<p>To %s, please use the following token:</p>
-<p><strong>{{.}}</strong></p>
-<p><em>Security Notice:</em> Please do not share this token with anyone else. It is confidential and should be kept private.</p>`,
-			heading,
-			strings.ToLower(action),
-		),
-		"\n",
-		"",
-	)
-	return template.Must(template.New(action).Parse(text))
-}
-
-func run(cfg *config) error {
-	db, err := postgres.NewService(context.Background(), cfg.Postgres.URI)
+func run(cfg *config.Config) error {
+	db, err := postgres.NewService(context.Background(), cfg.Postgres)
 	if err != nil {
 		return err
 	}
@@ -99,55 +35,39 @@ func run(cfg *config) error {
 	}
 	errorWriter := logrus.StandardLogger().WriterLevel(logrus.ErrorLevel)
 	defer errorWriter.Close()
-	mail := smtp.NewService(&smtp.Config{
-		Host:      cfg.SMTP.Host,
-		Port:      cfg.SMTP.Port,
-		Name:      cfg.SMTP.Name,
-		Username:  cfg.SMTP.Username,
-		Password:  cfg.SMTP.Password,
-		From:      cfg.SMTP.From,
-		ErrorLog:  log.New(errorWriter, "", 0),
-		TLSConfig: &tls.Config{ServerName: cfg.SMTP.Host},
-	})
+	cfg.SMTP.ErrorLog = log.New(errorWriter, "", 0)
+	cfg.SMTP.TLSConfig = &tls.Config{ServerName: cfg.SMTP.Host}
+	mail := smtp.NewService(&cfg.SMTP)
 	defer mail.Close()
 	user := &handler.User{
-		DB:   userDB,
-		Mail: mail,
-		ConfirmationToken: jwt.NewService[handler.UserConfirmationToken](
-			cfg.JWT.ConfirmationSecret,
-			15*time.Minute,
-		),
-		SessionToken: jwt.NewService[handler.UserSessionToken](
-			cfg.JWT.SessionSecret,
-			7*24*time.Hour,
-		),
-		SudoToken: jwt.NewService[handler.UserSessionToken](
-			cfg.JWT.SudoSecret,
-			5*time.Minute,
-		),
-		PasswordResetToken: jwt.NewService[handler.UserPasswordResetToken](
-			cfg.JWT.PasswordResetSecret,
-			15*time.Minute,
-		),
+		DB:                 userDB,
+		Mail:               mail,
+		ConfirmationToken:  jwt.NewService[handler.UserConfirmationToken](cfg.JWT.User.Confirmation),
+		SessionToken:       jwt.NewService[handler.UserSessionToken](cfg.JWT.User.Session),
+		SudoToken:          jwt.NewService[handler.UserSessionToken](cfg.JWT.User.Sudo),
+		PasswordResetToken: jwt.NewService[handler.UserPasswordResetToken](cfg.JWT.User.PasswordReset),
 		Password:           argon2id.NewService(argon2id.DefaultParams),
-		NameValidation:     validation.NewMinMaxService(1, 1000),
+		NameValidation:     validation.NewMinMaxService(cfg.Validation.User.Name),
 		EmailValidation:    validation.NewEmailService(validation.DefaultEmailPattern),
 		PasswordValidation: validation.NewPasswordService(validation.DefaultPasswordConfig),
 	}
-	rl := ratelimit.NewService(time.Minute, 3*time.Minute)
+	rl := ratelimit.NewService(
+		cfg.RateLimit.CleanupInterval,
+		cfg.RateLimit.IdleTimeout,
+	)
 	defer rl.Close()
 	r := chi.NewRouter()
 	r.Use(handler.WithRequestID)
 	r.Use(handler.WithRequestID)
-	r.Use(handler.WithRateLimit(rl.NewLimiter(100, 1000)))
-	r.Use(handler.WithBodyLimit(1 << 12))
+	r.Use(handler.WithRateLimit(rl.NewLimiter(cfg.RateLimit.IP)))
+	r.Use(handler.WithBodyLimit(int64(cfg.HTTP.BodyLimit)))
 	r.NotFound(handler.NotFound())
 	r.MethodNotAllowed(handler.MethodNotAllowed())
 	r.Route("/user", func(r chi.Router) {
-		session := user.WithSession(user.SessionToken, rl.NewLimiter(5, 25))
-		sudo := user.WithSession(user.SudoToken, rl.NewLimiter(1, 5))
-		r.Post("/", user.Create(rl.NewLimiter(5, 25)))
-		r.Post("/password-reset", user.ResetPassword(rl.NewLimiter(1, 5)))
+		session := user.WithSession(user.SessionToken, rl.NewLimiter(cfg.RateLimit.User.Session))
+		sudo := user.WithSession(user.SudoToken, rl.NewLimiter(cfg.RateLimit.User.Sudo))
+		r.Post("/", user.Create(rl.NewLimiter(cfg.RateLimit.User.Create)))
+		r.Post("/password-reset", user.ResetPassword(rl.NewLimiter(cfg.RateLimit.User.ResetPassword)))
 		r.Group(func(r chi.Router) {
 			r.Use(session)
 			r.Get("/", user.Get())
@@ -163,35 +83,26 @@ func run(cfg *config) error {
 			r.Post(
 				"/confirmation",
 				user.CreateConfirmationToken(
-					createUserTokenTmpl(
-						"Email confirmation",
-						"Confirm your email",
-					),
-					rl.NewLimiter(1.0/(15*60), 2),
+					cfg.Mail.User.Confirmation,
+					rl.NewLimiter(cfg.RateLimit.User.CreateConfirmationToken),
 				),
 			)
 			r.Post("/session", user.CreateSessionToken(
-				rl.NewLimiter(10, 50),
-				rl.NewLimiter(1, 5),
+				rl.NewLimiter(cfg.RateLimit.User.CreateSessionToken.IP),
+				rl.NewLimiter(cfg.RateLimit.User.CreateSessionToken.Email),
 			))
 			r.Post(
 				"/password-reset",
 				user.CreatePasswordResetToken(
-					createUserTokenTmpl(
-						"Password reset",
-						"Reset your password",
-					),
-					rl.NewLimiter(1.0/(15*60), 2),
+					cfg.Mail.User.PasswordReset,
+					rl.NewLimiter(cfg.RateLimit.User.CreatePasswordResetToken),
 				),
 			)
 			r.With(session).Post(
 				"/sudo",
 				user.CreateSudoToken(
-					createUserTokenTmpl(
-						"Performing sensitive action",
-						"Perform sensitive action",
-					),
-					rl.NewLimiter(1.0/(5*60), 2),
+					cfg.Mail.User.Sudo,
+					rl.NewLimiter(cfg.RateLimit.User.CreateSudoToken),
 				),
 			)
 		})
@@ -200,10 +111,10 @@ func run(cfg *config) error {
 		Addr:           net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port),
 		Handler:        r,
 		TLSConfig:      &tls.Config{MinVersion: tls.VersionTLS13},
-		ReadTimeout:    1 * time.Second,
-		WriteTimeout:   1 * time.Second,
-		IdleTimeout:    30 * time.Second,
-		MaxHeaderBytes: 1 << 12,
+		ReadTimeout:    cfg.HTTP.ReadTimeout,
+		WriteTimeout:   cfg.HTTP.WriteTimeout,
+		IdleTimeout:    cfg.HTTP.IdleTimeout,
+		MaxHeaderBytes: cfg.HTTP.HeaderLimit,
 		ErrorLog:       log.New(errorWriter, "", 0),
 	}
 	done := make(chan error, 1)
@@ -223,14 +134,14 @@ func run(cfg *config) error {
 
 func main() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
-	var cfg config
-	if err := env.ParseWithOptions(
-		&cfg,
-		env.Options{RequiredIfNoDef: true},
-	); err != nil {
+	if len(os.Args) < 2 {
+		logrus.Fatal("no config file provided")
+	}
+	cfg, err := config.New(os.Args[1])
+	if err != nil {
 		logrus.Fatal(err)
 	}
-	if err := run(&cfg); err != nil {
+	if err := run(cfg); err != nil {
 		logrus.Fatal(err)
 	}
 }

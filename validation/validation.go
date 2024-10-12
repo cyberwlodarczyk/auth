@@ -23,12 +23,12 @@ type Service[T any] interface {
 }
 
 type PasswordConfig struct {
-	Upper     int
-	Lower     int
-	Number    int
-	Special   int
-	MinLength int
-	MaxLength int
+	Upper     int `yaml:"upper"`
+	Lower     int `yaml:"lower"`
+	Number    int `yaml:"number"`
+	Special   int `yaml:"special"`
+	MinLength int `yaml:"minLength"`
+	MaxLength int `yaml:"maxLength"`
 }
 
 func NewPasswordService(cfg *PasswordConfig) Service[[]byte] {
@@ -82,8 +82,13 @@ func (s *emailService) Check(email string) bool {
 	return s.pattern.MatchString(email)
 }
 
-func NewMinMaxService(min, max int) Service[string] {
-	return &minMaxService{min, max}
+type Range struct {
+	Min int `yaml:"min"`
+	Max int `yaml:"max"`
+}
+
+func NewMinMaxService(r Range) Service[string] {
+	return &minMaxService{r.Min, r.Max}
 }
 
 type minMaxService struct {

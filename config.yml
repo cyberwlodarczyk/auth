@@ -1,0 +1,74 @@
+http:
+  bodyLimit: 4096
+  headerLimit: 4096
+  readTimeout: "1s"
+  writeTimeout: "1s"
+  idleTimeout: "5s"
+validation:
+  user:
+    name:
+      min: 3
+      max: 100
+    password:
+      upper: 1
+      lower: 1
+      number: 1
+      special: 1
+      minLength: 12
+      maxLength: 64
+rateLimit:
+  cleanupInterval: "1m"
+  idleTimeout: "3m"
+  ip:
+    rate: 100
+    burst: 1000
+  user:
+    session:
+      rate: 5
+      burst: 25
+    sudo:
+      rate: 1
+      burst: 5
+    create:
+      rate: 5
+      burst: 25
+    resetPassword:
+      rate: 1
+      burst: 5
+    createConfirmationToken:
+      burst: 2
+    createPasswordResetToken:
+      burst: 2
+    createSessionToken:
+      ip:
+        rate: 10
+        burst: 50
+      email:
+        rate: 1
+        burst: 5
+    createSudoToken:
+      burst: 2
+mail:
+  user:
+    confirmation:
+      heading: "Email confirmation"
+      action: "Confirm your email"
+    passwordReset:
+      heading: "Password reset"
+      action: "Reset your password"
+    sudo:
+      heading: "Performing sensitive action"
+      action: "Perform sensitive action"
+jwt:
+  user:
+    confirmation:
+      age: "15m"
+    session:
+      age: "168h" # 7 days
+    passwordReset:
+      age: "15m"
+    sudo:
+      age: "5m"
+smtp:
+  name: "example.com"
+  from: "test@example.com"

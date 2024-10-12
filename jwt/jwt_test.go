@@ -11,7 +11,7 @@ const a1, a2 = 1 * time.Hour, 30 * time.Minute
 var (
 	k1, k2     = []byte("mysecr3tk3y"), []byte("ot#ersecr3t")
 	d1, d2     = uid{1}, uid{2}
-	s1, s2, s3 = NewService[uid](k1, a1), NewService[uid](k2, a1), NewService[uid](k1, a2)
+	s1, s2, s3 = NewService[uid](Config{k1, a1}), NewService[uid](Config{k2, a1}), NewService[uid](Config{k1, a2})
 )
 
 type uid struct {
@@ -61,7 +61,7 @@ func TestSign(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	s1 := NewService[uid](k1, a1)
+	s1 := NewService[uid](Config{k1, a1})
 	t1, err := s1.Sign(d1)
 	if err != nil {
 		t.Fatal(err)
