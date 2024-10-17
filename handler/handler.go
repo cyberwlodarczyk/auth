@@ -63,23 +63,108 @@ func (e *operationalError) Error() string {
 	return e.message
 }
 
-var (
-	errNotFound          = &operationalError{http.StatusNotFound, "resource could not be found"}
-	errMethodNotAllowed  = &operationalError{http.StatusMethodNotAllowed, "specified method is not allowed for this resource"}
-	errExceededBodyLimit = &operationalError{http.StatusRequestEntityTooLarge, "request body limit has been exceeded"}
-	errMalformedBody     = &operationalError{http.StatusBadRequest, "request body is invalid or malformed"}
-	errBadBodyEncoding   = &operationalError{http.StatusUnsupportedMediaType, "request body encoding should be json"}
-	errTooManyRequests   = &operationalError{http.StatusTooManyRequests, "request rate limit has been exceeded"}
-)
+func isJWTErrorOperational(err error) bool {
+	return errors.Is(err, jwt.ErrExceededExpiration) ||
+		errors.Is(err, jwt.ErrInvalidFormat) ||
+		errors.Is(err, jwt.ErrInvalidSignature) ||
+		errors.Is(err, jwt.ErrMissingExpiration)
+}
 
-func decodeJSONBody(r *http.Request, v any) error {
+type Config struct {
+	Errors Errors
+}
+
+type Errors struct {
+	Internal          string `yaml:"internal"`
+	NotFound          string `yaml:"notFound"`
+	MethodNotAllowed  string `yaml:"methodNotAllowed"`
+	BodyLimitExceeded string `yaml:"bodyLimitExceeded"`
+	BodyMalformed     string `yaml:"bodyMalformed"`
+	BadBodyEncoding   string `yaml:"badBodyEncoding"`
+	TooManyRequests   string `yaml:"tooManyRequests"`
+}
+
+type Service struct {
+	errInternal          string
+	errNotFound          error
+	errMethodNotAllowed  error
+	errExceededBodyLimit error
+	errMalformedBody     error
+	errBadBodyEncoding   error
+	errTooManyRequests   error
+}
+
+func NewService(cfg *Config) *Service {
+	return &Service{
+		errInternal:          cfg.Errors.Internal,
+		errNotFound:          &operationalError{http.StatusNotFound, cfg.Errors.NotFound},
+		errMethodNotAllowed:  &operationalError{http.StatusMethodNotAllowed, cfg.Errors.MethodNotAllowed},
+		errExceededBodyLimit: &operationalError{http.StatusRequestEntityTooLarge, cfg.Errors.BodyLimitExceeded},
+		errMalformedBody:     &operationalError{http.StatusBadRequest, cfg.Errors.BodyMalformed},
+		errBadBodyEncoding:   &operationalError{http.StatusUnsupportedMediaType, cfg.Errors.BadBodyEncoding},
+		errTooManyRequests:   &operationalError{http.StatusTooManyRequests, cfg.Errors.TooManyRequests},
+	}
+}
+
+func (s *Service) NotFound() http.HandlerFunc {
+	return s.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+		err = s.errNotFound
+		return
+	})
+}
+
+func (s *Service) MethodNotAllowed() http.HandlerFunc {
+	return s.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+		err = s.errMethodNotAllowed
+		return
+	})
+}
+
+func (s *Service) WithRequestID(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := uuid.New().String()
+		w.Header().Add("X-Request-ID", id)
+		h.ServeHTTP(w, setRequestID(r, id))
+	})
+}
+
+func (s *Service) WithRequestTime(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, setRequestTime(r, time.Now()))
+	})
+}
+
+func (s *Service) WithBodyLimit(bytes int64) func(http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, bytes)
+			h.ServeHTTP(w, r)
+		})
+	}
+}
+
+func (s *Service) WithRateLimit(limiter ratelimit.Limiter) func(http.Handler) http.Handler {
+	return s.createMiddleware(func(h http.Handler, w http.ResponseWriter, r *http.Request) error {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			return err
+		}
+		if !limiter.Allow(ip) {
+			return s.errTooManyRequests
+		}
+		h.ServeHTTP(w, r)
+		return nil
+	})
+}
+
+func (s *Service) decodeJSONBody(r *http.Request, v any) error {
 	mime := strings.ToLower(
 		strings.TrimSpace(
 			strings.Split(r.Header.Get("Content-Type"), ";")[0],
 		),
 	)
 	if mime != "application/json" {
-		return errBadBodyEncoding
+		return s.errBadBodyEncoding
 	}
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
@@ -92,22 +177,22 @@ func decodeJSONBody(r *http.Request, v any) error {
 			errors.Is(err, io.ErrUnexpectedEOF) ||
 			errors.Is(err, io.EOF) ||
 			strings.HasPrefix(err.Error(), "json: unknown field ") {
-			return errMalformedBody
+			return s.errMalformedBody
 		}
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			return errExceededBodyLimit
+			return s.errExceededBodyLimit
 		}
 		return err
 	}
 	err = d.Decode(&struct{}{})
 	if !errors.Is(err, io.EOF) {
-		return errMalformedBody
+		return s.errMalformedBody
 	}
 	return nil
 }
 
-func reply(w http.ResponseWriter, r *http.Request, res response, err error) {
+func (s *Service) reply(w http.ResponseWriter, r *http.Request, res response, err error) {
 	if err != nil {
 		var operationalErr *operationalError
 		if errors.As(err, &operationalErr) {
@@ -118,7 +203,7 @@ func reply(w http.ResponseWriter, r *http.Request, res response, err error) {
 		} else {
 			res = response{
 				http.StatusInternalServerError,
-				message{"something went wrong"},
+				message{s.errInternal},
 			}
 		}
 	}
@@ -162,77 +247,19 @@ func reply(w http.ResponseWriter, r *http.Request, res response, err error) {
 	}
 }
 
-func createMiddleware(f func(h http.Handler, w http.ResponseWriter, r *http.Request) error) func(http.Handler) http.Handler {
+func (s *Service) createMiddleware(f func(h http.Handler, w http.ResponseWriter, r *http.Request) error) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := f(h, w, r); err != nil {
-				reply(w, r, response{}, err)
+				s.reply(w, r, response{}, err)
 			}
 		})
 	}
 }
 
-func createHandler(f func(w http.ResponseWriter, r *http.Request) (response, error)) http.HandlerFunc {
+func (s *Service) createHandler(f func(w http.ResponseWriter, r *http.Request) (response, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res, err := f(w, r)
-		reply(w, r, res, err)
+		s.reply(w, r, res, err)
 	}
-}
-
-func isJWTErrorOperational(err error) bool {
-	return errors.Is(err, jwt.ErrExceededExpiration) ||
-		errors.Is(err, jwt.ErrInvalidFormat) ||
-		errors.Is(err, jwt.ErrInvalidSignature) ||
-		errors.Is(err, jwt.ErrMissingExpiration)
-}
-
-func NotFound() http.HandlerFunc {
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
-		err = errNotFound
-		return
-	})
-}
-
-func MethodNotAllowed() http.HandlerFunc {
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
-		err = errMethodNotAllowed
-		return
-	})
-}
-
-func WithRequestID(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := uuid.New().String()
-		w.Header().Add("X-Request-ID", id)
-		h.ServeHTTP(w, setRequestID(r, id))
-	})
-}
-
-func WithRequestTime(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, setRequestTime(r, time.Now()))
-	})
-}
-
-func WithBodyLimit(bytes int64) func(http.Handler) http.Handler {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, bytes)
-			h.ServeHTTP(w, r)
-		})
-	}
-}
-
-func WithRateLimit(limiter ratelimit.Limiter) func(http.Handler) http.Handler {
-	return createMiddleware(func(h http.Handler, w http.ResponseWriter, r *http.Request) error {
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			return err
-		}
-		if !limiter.Allow(ip) {
-			return errTooManyRequests
-		}
-		h.ServeHTTP(w, r)
-		return nil
-	})
 }

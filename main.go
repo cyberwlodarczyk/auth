@@ -39,67 +39,72 @@ func run(cfg *config.Config) error {
 	cfg.SMTP.TLSConfig = &tls.Config{ServerName: cfg.SMTP.Host}
 	mail := smtp.NewService(&cfg.SMTP)
 	defer mail.Close()
-	user := &handler.User{
+	root := handler.NewService(&handler.Config{Errors: cfg.Errors.Root})
+	userSessionToken := jwt.NewService[handler.UserSessionToken](cfg.JWT.User.Session)
+	userSudoToken := jwt.NewService[handler.UserSessionToken](cfg.JWT.User.Sudo)
+	user := handler.NewUserService(&handler.UserConfig{
+		Errors:             cfg.Errors.User,
+		Root:               root,
 		DB:                 userDB,
 		Mail:               mail,
 		ConfirmationToken:  jwt.NewService[handler.UserConfirmationToken](cfg.JWT.User.Confirmation),
-		SessionToken:       jwt.NewService[handler.UserSessionToken](cfg.JWT.User.Session),
-		SudoToken:          jwt.NewService[handler.UserSessionToken](cfg.JWT.User.Sudo),
+		SessionToken:       userSessionToken,
+		SudoToken:          userSudoToken,
 		PasswordResetToken: jwt.NewService[handler.UserPasswordResetToken](cfg.JWT.User.PasswordReset),
 		Password:           argon2id.NewService(argon2id.DefaultParams),
 		NameValidation:     validation.NewMinMaxService(cfg.Validation.User.Name),
 		EmailValidation:    validation.NewEmailService(validation.DefaultEmailPattern),
 		PasswordValidation: validation.NewPasswordService(validation.DefaultPasswordConfig),
-	}
+	})
 	rl := ratelimit.NewService(
 		cfg.RateLimit.CleanupInterval,
 		cfg.RateLimit.IdleTimeout,
 	)
 	defer rl.Close()
 	r := chi.NewRouter()
-	r.Use(handler.WithRequestID)
-	r.Use(handler.WithRequestID)
-	r.Use(handler.WithRateLimit(rl.NewLimiter(cfg.RateLimit.IP)))
-	r.Use(handler.WithBodyLimit(int64(cfg.HTTP.BodyLimit)))
-	r.NotFound(handler.NotFound())
-	r.MethodNotAllowed(handler.MethodNotAllowed())
-	r.Route("/user", func(r chi.Router) {
-		session := user.WithSession(user.SessionToken, rl.NewLimiter(cfg.RateLimit.User.Session))
-		sudo := user.WithSession(user.SudoToken, rl.NewLimiter(cfg.RateLimit.User.Sudo))
-		r.Post("/", user.Create(rl.NewLimiter(cfg.RateLimit.User.Create)))
-		r.Post("/password-reset", user.ResetPassword(rl.NewLimiter(cfg.RateLimit.User.ResetPassword)))
+	r.Use(root.WithRequestID)
+	r.Use(root.WithRequestID)
+	r.Use(root.WithRateLimit(rl.NewLimiter(cfg.RateLimit.IP)))
+	r.Use(root.WithBodyLimit(int64(cfg.HTTP.BodyLimit)))
+	r.NotFound(root.NotFound())
+	r.MethodNotAllowed(root.MethodNotAllowed())
+	r.Route(cfg.Routes.User.Prefix, func(r chi.Router) {
+		session := user.WithSession(userSessionToken, rl.NewLimiter(cfg.RateLimit.User.Session))
+		sudo := user.WithSession(userSudoToken, rl.NewLimiter(cfg.RateLimit.User.Sudo))
+		r.Post(cfg.Routes.User.Create, user.Create(rl.NewLimiter(cfg.RateLimit.User.Create)))
+		r.Post(cfg.Routes.User.ResetPassword, user.ResetPassword(rl.NewLimiter(cfg.RateLimit.User.ResetPassword)))
 		r.Group(func(r chi.Router) {
 			r.Use(session)
-			r.Get("/", user.Get())
-			r.Put("/name", user.EditName())
-			r.Put("/password", user.EditPassword())
+			r.Get(cfg.Routes.User.Get, user.Get())
+			r.Put(cfg.Routes.User.EditName, user.EditName())
+			r.Put(cfg.Routes.User.EditPassword, user.EditPassword())
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(sudo)
-			r.Put("/email", user.EditEmail())
-			r.Delete("/", user.Delete())
+			r.Put(cfg.Routes.User.EditEmail, user.EditEmail())
+			r.Delete(cfg.Routes.User.Delete, user.Delete())
 		})
-		r.Route("/token", func(r chi.Router) {
+		r.Route(cfg.Routes.User.Token.Prefix, func(r chi.Router) {
 			r.Post(
-				"/confirmation",
+				cfg.Routes.User.Token.CreateConfirmation,
 				user.CreateConfirmationToken(
 					cfg.Mail.User.Confirmation,
 					rl.NewLimiter(cfg.RateLimit.User.CreateConfirmationToken),
 				),
 			)
-			r.Post("/session", user.CreateSessionToken(
+			r.Post(cfg.Routes.User.Token.CreateSession, user.CreateSessionToken(
 				rl.NewLimiter(cfg.RateLimit.User.CreateSessionToken.IP),
 				rl.NewLimiter(cfg.RateLimit.User.CreateSessionToken.Email),
 			))
 			r.Post(
-				"/password-reset",
+				cfg.Routes.User.Token.CreatePasswordReset,
 				user.CreatePasswordResetToken(
 					cfg.Mail.User.PasswordReset,
 					rl.NewLimiter(cfg.RateLimit.User.CreatePasswordResetToken),
 				),
 			)
 			r.With(session).Post(
-				"/sudo",
+				cfg.Routes.User.Token.CreateSudo,
 				user.CreateSudoToken(
 					cfg.Mail.User.Sudo,
 					rl.NewLimiter(cfg.RateLimit.User.CreateSudoToken),

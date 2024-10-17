@@ -26,6 +26,29 @@ type Config struct {
 		WriteTimeout time.Duration `yaml:"writeTimeout"`
 		IdleTimeout  time.Duration `yaml:"idleTimeout"`
 	} `yaml:"http" envPrefix:"HTTP_"`
+	Routes struct {
+		User struct {
+			Prefix        string `yaml:"_prefix"`
+			Get           string `yaml:"get"`
+			Create        string `yaml:"create"`
+			Delete        string `yaml:"delete"`
+			ResetPassword string `yaml:"resetPassword"`
+			EditName      string `yaml:"editName"`
+			EditPassword  string `yaml:"editPassword"`
+			EditEmail     string `yaml:"editEmail"`
+			Token         struct {
+				Prefix              string `yaml:"_prefix"`
+				CreateConfirmation  string `yaml:"createConfirmation"`
+				CreateSession       string `yaml:"createSession"`
+				CreatePasswordReset string `yaml:"createPasswordReset"`
+				CreateSudo          string `yaml:"createSudo"`
+			} `yaml:"token"`
+		} `yaml:"user"`
+	} `yaml:"routes"`
+	Errors struct {
+		Root handler.Errors     `yaml:"root"`
+		User handler.UserErrors `yaml:"user"`
+	} `yaml:"errors"`
 	Validation struct {
 		User struct {
 			Name     validation.Range          `yaml:"name"`

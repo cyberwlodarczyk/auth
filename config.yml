@@ -4,6 +4,43 @@ http:
   readTimeout: "1s"
   writeTimeout: "1s"
   idleTimeout: "5s"
+routes:
+  user:
+    _prefix: "/user"
+    get: "/"
+    create: "/"
+    delete: "/"
+    resetPassword: "/password-reset"
+    editName: "/name"
+    editPassword: "/password"
+    editEmail: "/email"
+    token:
+      _prefix: "/token"
+      createConfirmation: "/confirmation"
+      createSession: "/session"
+      createPasswordReset: "/password-reset"
+      createSudo: "/sudo"
+errors:
+  root:
+    internal: "something went wrong"
+    notFound: "resource could not be found"
+    methodNotAllowed: "specified method is not allowed for this resource"
+    bodyLimitExceeded: "request body limit has been exceeded"
+    bodyMalformed: "request body is invalid or malformed"
+    badBodyEncoding: "request body encoding is invalid"
+    tooManyRequests: "request rate limit has been exceeded"
+  user:
+    badName: "name is too short or too long"
+    badEmail: "email is not in the correct format"
+    badPassword: "password is too weak or too long"
+    badPasswordEncoding: "password is not encoded with standard raw, unpadded base64"
+    badToken: "token is invalid or expired"
+    badSession: "session is invalid or expired"
+    missingSession: "session is missing"
+    invalidCredentials: "credentials are invalid"
+    invalidPassword: "password is invalid"
+    notFound: "user does not exist"
+    alreadyExists: "user already exists"
 validation:
   user:
     name:

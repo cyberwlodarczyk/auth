@@ -21,19 +21,7 @@ import (
 	"github.com/cyberwlodarczyk/auth/validation"
 )
 
-var (
-	errBadUserName             = &operationalError{http.StatusBadRequest, "name is too short or too long"}
-	errBadUserEmail            = &operationalError{http.StatusBadRequest, "email is not in the correct format"}
-	errBadUserPassword         = &operationalError{http.StatusBadRequest, "password is too weak or too long"}
-	errBadUserPasswordEncoding = &operationalError{http.StatusBadRequest, "password is not encoded with standard raw, unpadded base64"}
-	errBadUserToken            = &operationalError{http.StatusUnauthorized, "token is invalid or expired"}
-	errBadUserSession          = &operationalError{http.StatusUnauthorized, "session is invalid or expired"}
-	errMissingUserSession      = &operationalError{http.StatusUnauthorized, "session is missing"}
-	errInvalidUserCredentials  = &operationalError{http.StatusUnauthorized, "credentials are invalid"}
-	errInvalidUserPassword     = &operationalError{http.StatusUnauthorized, "password is invalid"}
-	errUserNotFound            = &operationalError{http.StatusNotFound, "user does not exist"}
-	errUserAlreadyExists       = &operationalError{http.StatusConflict, "user already exists"}
-)
+var errUserPassword = errors.New("user password has invalid encoding")
 
 type userPassword []byte
 
@@ -46,24 +34,10 @@ func (p *userPassword) UnmarshalJSON(data []byte) error {
 	b, err := base64.RawStdEncoding.DecodeString(s)
 	if err != nil {
 		memguard.WipeBytes(b)
-		return errBadUserPasswordEncoding
+		return errUserPassword
 	}
 	*p = b
 	return nil
-}
-
-func isBadUserToken(err error) error {
-	if isJWTErrorOperational(err) {
-		return errBadUserToken
-	}
-	return err
-}
-
-func isUserNotFound(err error) error {
-	if errors.Is(err, postgres.ErrNotFound) {
-		return errUserNotFound
-	}
-	return err
 }
 
 type UserConfirmationToken struct {
@@ -98,7 +72,9 @@ func (m UserTokenMail) createTmpl() *template.Template {
 	return template.Must(template.New(m.Action).Parse(text))
 }
 
-type User struct {
+type UserConfig struct {
+	Errors             UserErrors
+	Root               *Service
 	DB                 postgres.UserService
 	Mail               smtp.Service
 	ConfirmationToken  jwt.Service[UserConfirmationToken]
@@ -111,56 +87,144 @@ type User struct {
 	PasswordValidation validation.Service[[]byte]
 }
 
-func (u *User) WithSession(svc jwt.Service[UserSessionToken], limiter ratelimit.Limiter) func(http.Handler) http.Handler {
-	return createMiddleware(func(h http.Handler, w http.ResponseWriter, r *http.Request) error {
+type UserErrors struct {
+	BadName             string `yaml:"badName"`
+	BadEmail            string `yaml:"badEmail"`
+	BadPassword         string `yaml:"badPassword"`
+	BadPasswordEncoding string `yaml:"badPasswordEncoding"`
+	BadToken            string `yaml:"badToken"`
+	BadSession          string `yaml:"badSession"`
+	MissingSession      string `yaml:"missingSession"`
+	InvalidCredentials  string `yaml:"invalidCredentials"`
+	InvalidPassword     string `yaml:"invalidPassword"`
+	NotFound            string `yaml:"notFound"`
+	AlreadyExists       string `yaml:"alreadyExists"`
+}
+
+type UserService struct {
+	errBadName             error
+	errBadEmail            error
+	errBadPassword         error
+	errBadPasswordEncoding error
+	errBadToken            error
+	errBadSession          error
+	errMissingSession      error
+	errInvalidCredentials  error
+	errInvalidPassword     error
+	errNotFound            error
+	errAlreadyExists       error
+	root                   *Service
+	db                     postgres.UserService
+	mail                   smtp.Service
+	confirmationToken      jwt.Service[UserConfirmationToken]
+	sessionToken           jwt.Service[UserSessionToken]
+	sudoToken              jwt.Service[UserSessionToken]
+	passwordResetToken     jwt.Service[UserPasswordResetToken]
+	password               argon2id.Service
+	nameValidation         validation.Service[string]
+	emailValidation        validation.Service[string]
+	passwordValidation     validation.Service[[]byte]
+}
+
+func NewUserService(cfg *UserConfig) *UserService {
+	return &UserService{
+		errBadName:             &operationalError{http.StatusBadRequest, cfg.Errors.BadName},
+		errBadEmail:            &operationalError{http.StatusBadRequest, cfg.Errors.BadEmail},
+		errBadPassword:         &operationalError{http.StatusBadRequest, cfg.Errors.BadPassword},
+		errBadPasswordEncoding: &operationalError{http.StatusBadRequest, cfg.Errors.BadPasswordEncoding},
+		errBadToken:            &operationalError{http.StatusUnauthorized, cfg.Errors.BadToken},
+		errBadSession:          &operationalError{http.StatusUnauthorized, cfg.Errors.BadSession},
+		errMissingSession:      &operationalError{http.StatusUnauthorized, cfg.Errors.MissingSession},
+		errInvalidCredentials:  &operationalError{http.StatusUnauthorized, cfg.Errors.InvalidCredentials},
+		errInvalidPassword:     &operationalError{http.StatusUnauthorized, cfg.Errors.InvalidPassword},
+		errNotFound:            &operationalError{http.StatusNotFound, cfg.Errors.NotFound},
+		errAlreadyExists:       &operationalError{http.StatusConflict, cfg.Errors.AlreadyExists},
+		root:                   cfg.Root,
+		db:                     cfg.DB,
+		mail:                   cfg.Mail,
+		confirmationToken:      cfg.ConfirmationToken,
+		sessionToken:           cfg.SessionToken,
+		sudoToken:              cfg.SudoToken,
+		passwordResetToken:     cfg.PasswordResetToken,
+		password:               cfg.Password,
+		nameValidation:         cfg.NameValidation,
+		emailValidation:        cfg.EmailValidation,
+		passwordValidation:     cfg.PasswordValidation,
+	}
+}
+
+func (s *UserService) decodeJSONBody(r *http.Request, v any) error {
+	err := s.root.decodeJSONBody(r, v)
+	if errors.Is(err, errUserPassword) {
+		return s.errBadPasswordEncoding
+	}
+	return err
+}
+
+func (s *UserService) isBadToken(err error) error {
+	if isJWTErrorOperational(err) {
+		return s.errBadToken
+	}
+	return err
+}
+
+func (s *UserService) isNotFound(err error) error {
+	if errors.Is(err, postgres.ErrNotFound) {
+		return s.errNotFound
+	}
+	return err
+}
+
+func (s *UserService) WithSession(svc jwt.Service[UserSessionToken], limiter ratelimit.Limiter) func(http.Handler) http.Handler {
+	return s.root.createMiddleware(func(h http.Handler, w http.ResponseWriter, r *http.Request) error {
 		header := strings.Split(r.Header.Get("Authorization"), " ")
 		if len(header) != 2 || header[0] != "Bearer" {
-			return errMissingUserSession
+			return s.errMissingSession
 		}
 		token, err := svc.Verify(header[1])
 		if err != nil {
 			if isJWTErrorOperational(err) {
-				return errBadUserSession
+				return s.errBadSession
 			}
 			return err
 		}
 		if !limiter.Allow(strconv.FormatInt(token.Id, 16)) {
-			return errTooManyRequests
+			return s.root.errTooManyRequests
 		}
 		h.ServeHTTP(w, setUserID(r, token.Id))
 		return nil
 	})
 }
 
-func (u *User) CreateConfirmationToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
+func (s *UserService) CreateConfirmationToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email string `json:"email"`
 	}
 	tmpl := mail.createTmpl()
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
-		if !u.EmailValidation.Check(body.Email) {
-			err = errBadUserEmail
+		if !s.emailValidation.Check(body.Email) {
+			err = s.errBadEmail
 			return
 		}
 		if !limiter.Allow(body.Email) {
-			err = errTooManyRequests
+			err = s.root.errTooManyRequests
 			return
 		}
-		token, err := u.ConfirmationToken.Sign(UserConfirmationToken(body))
+		token, err := s.confirmationToken.Sign(UserConfirmationToken(body))
 		if err != nil {
 			return
 		}
-		u.Mail.Send(body.Email, tmpl, token)
+		s.mail.Send(body.Email, tmpl, token)
 		res = response{http.StatusNoContent, nil}
 		return
 	})
 }
 
-func (u *User) CreateSessionToken(ipLimiter ratelimit.Limiter, emailLimiter ratelimit.Limiter) http.HandlerFunc {
+func (s *UserService) CreateSessionToken(ipLimiter ratelimit.Limiter, emailLimiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email    string       `json:"email"`
 		Password userPassword `json:"password"`
@@ -168,14 +232,14 @@ func (u *User) CreateSessionToken(ipLimiter ratelimit.Limiter, emailLimiter rate
 	type payload struct {
 		Token string `json:"token"`
 	}
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
 		defer memguard.WipeBytes(body.Password)
-		if !u.EmailValidation.Check(body.Email) {
-			err = errBadUserEmail
+		if !s.emailValidation.Check(body.Email) {
+			err = s.errBadEmail
 			return
 		}
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -183,25 +247,25 @@ func (u *User) CreateSessionToken(ipLimiter ratelimit.Limiter, emailLimiter rate
 			return
 		}
 		if !ipLimiter.Allow(ip) || !emailLimiter.Allow(body.Email) {
-			err = errTooManyRequests
+			err = s.root.errTooManyRequests
 			return
 		}
-		user, err := u.DB.GetByEmail(r.Context(), body.Email)
+		user, err := s.db.GetByEmail(r.Context(), body.Email)
 		if err != nil {
 			if errors.Is(err, postgres.ErrNotFound) {
-				err = errInvalidUserCredentials
+				err = s.errInvalidCredentials
 			}
 			return
 		}
-		match, _, err := u.Password.Compare(body.Password, user.Password)
+		match, _, err := s.password.Compare(body.Password, user.Password)
 		if err != nil {
 			return
 		}
 		if !match {
-			err = errInvalidUserCredentials
+			err = s.errInvalidCredentials
 			return
 		}
-		token, err := u.SessionToken.Sign(UserSessionToken{user.Id})
+		token, err := s.sessionToken.Sign(UserSessionToken{user.Id})
 		if err != nil {
 			return
 		}
@@ -210,25 +274,25 @@ func (u *User) CreateSessionToken(ipLimiter ratelimit.Limiter, emailLimiter rate
 	})
 }
 
-func (u *User) CreatePasswordResetToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
+func (s *UserService) CreatePasswordResetToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Email string `json:"email"`
 	}
 	tmpl := mail.createTmpl()
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
-		if !u.EmailValidation.Check(body.Email) {
-			err = errBadUserEmail
+		if !s.emailValidation.Check(body.Email) {
+			err = s.errBadEmail
 			return
 		}
 		if !limiter.Allow(body.Email) {
-			err = errTooManyRequests
+			err = s.root.errTooManyRequests
 			return
 		}
-		user, err := u.DB.GetByEmail(r.Context(), body.Email)
+		user, err := s.db.GetByEmail(r.Context(), body.Email)
 		if err != nil {
 			if errors.Is(err, postgres.ErrNotFound) {
 				err = nil
@@ -236,66 +300,66 @@ func (u *User) CreatePasswordResetToken(mail UserTokenMail, limiter ratelimit.Li
 			}
 			return
 		}
-		token, err := u.PasswordResetToken.Sign(UserPasswordResetToken{user.Id})
+		token, err := s.passwordResetToken.Sign(UserPasswordResetToken{user.Id})
 		if err != nil {
 			return
 		}
-		u.Mail.Send(body.Email, tmpl, token)
+		s.mail.Send(body.Email, tmpl, token)
 		res = response{http.StatusNoContent, nil}
 		return
 	})
 }
 
-func (u *User) CreateSudoToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
+func (s *UserService) CreateSudoToken(mail UserTokenMail, limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Password userPassword `json:"password"`
 	}
 	tmpl := mail.createTmpl()
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
 		defer memguard.WipeBytes(body.Password)
 		id := getUserID(r)
-		user, err := u.DB.GetById(r.Context(), id)
+		user, err := s.db.GetById(r.Context(), id)
 		if err != nil {
-			err = isUserNotFound(err)
+			err = s.isNotFound(err)
 			return
 		}
-		match, _, err := u.Password.Compare(body.Password, user.Password)
+		match, _, err := s.password.Compare(body.Password, user.Password)
 		if err != nil {
 			return
 		}
 		if !match {
-			err = errInvalidUserPassword
+			err = s.errInvalidPassword
 			return
 		}
 		if !limiter.Allow(strconv.FormatInt(id, 16)) {
-			err = errTooManyRequests
+			err = s.root.errTooManyRequests
 			return
 		}
-		token, err := u.SudoToken.Sign(UserSessionToken{id})
+		token, err := s.sudoToken.Sign(UserSessionToken{id})
 		if err != nil {
 			return
 		}
-		u.Mail.Send(user.Email, tmpl, token)
+		s.mail.Send(user.Email, tmpl, token)
 		res = response{http.StatusCreated, nil}
 		return
 	})
 }
 
-func (u *User) Get() http.HandlerFunc {
+func (s *UserService) Get() http.HandlerFunc {
 	type payload struct {
 		Id        int64     `json:"id"`
 		Email     string    `json:"email"`
 		Name      string    `json:"name"`
 		CreatedAt time.Time `json:"createdAt"`
 	}
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
-		user, err := u.DB.GetById(r.Context(), getUserID(r))
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+		user, err := s.db.GetById(r.Context(), getUserID(r))
 		if err != nil {
-			err = isUserNotFound(err)
+			err = s.isNotFound(err)
 			return
 		}
 		res = response{
@@ -311,7 +375,7 @@ func (u *User) Get() http.HandlerFunc {
 	})
 }
 
-func (u *User) Create(limiter ratelimit.Limiter) http.HandlerFunc {
+func (s *UserService) Create(limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Token    string       `json:"token"`
 		Name     string       `json:"name"`
@@ -321,23 +385,23 @@ func (u *User) Create(limiter ratelimit.Limiter) http.HandlerFunc {
 		Id        int64     `json:"id"`
 		CreatedAt time.Time `json:"createdAt"`
 	}
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
 		defer memguard.WipeBytes(body.Password)
-		token, err := u.ConfirmationToken.Verify(body.Token)
+		token, err := s.confirmationToken.Verify(body.Token)
 		if err != nil {
-			err = isBadUserToken(err)
+			err = s.isNotFound(err)
 			return
 		}
-		if !u.NameValidation.Check(body.Name) {
-			err = errBadUserName
+		if !s.nameValidation.Check(body.Name) {
+			err = s.errBadName
 			return
 		}
-		if !u.PasswordValidation.Check(body.Password) {
-			err = errBadUserPassword
+		if !s.passwordValidation.Check(body.Password) {
+			err = s.errBadPassword
 			return
 		}
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -345,20 +409,20 @@ func (u *User) Create(limiter ratelimit.Limiter) http.HandlerFunc {
 			return
 		}
 		if !limiter.Allow(ip) {
-			err = errTooManyRequests
+			err = s.root.errTooManyRequests
 			return
 		}
-		hash, err := u.Password.Hash(body.Password)
+		hash, err := s.password.Hash(body.Password)
 		if err != nil {
 			return
 		}
-		id, createdAt, err := u.DB.Create(r.Context(), postgres.CreateUserOpts{
+		id, createdAt, err := s.db.Create(r.Context(), postgres.CreateUserOpts{
 			Email:    token.Email,
 			Name:     body.Name,
 			Password: hash,
 		})
 		if errors.Is(err, postgres.ErrAlreadyExists) {
-			err = errUserAlreadyExists
+			err = s.errAlreadyExists
 			return
 		}
 		if err != nil {
@@ -369,23 +433,23 @@ func (u *User) Create(limiter ratelimit.Limiter) http.HandlerFunc {
 	})
 }
 
-func (u *User) EditEmail() http.HandlerFunc {
+func (s *UserService) EditEmail() http.HandlerFunc {
 	type body struct {
 		Token string `json:"token"`
 	}
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
-		token, err := u.ConfirmationToken.Verify(body.Token)
+		token, err := s.confirmationToken.Verify(body.Token)
 		if err != nil {
-			err = isBadUserToken(err)
+			err = s.isBadToken(err)
 			return
 		}
-		err = u.DB.EditEmail(r.Context(), getUserID(r), token.Email)
+		err = s.db.EditEmail(r.Context(), getUserID(r), token.Email)
 		if err != nil {
-			err = isUserNotFound(err)
+			err = s.isNotFound(err)
 			return
 		}
 		res = response{http.StatusNoContent, nil}
@@ -393,22 +457,22 @@ func (u *User) EditEmail() http.HandlerFunc {
 	})
 }
 
-func (u *User) EditName() http.HandlerFunc {
+func (s *UserService) EditName() http.HandlerFunc {
 	type body struct {
 		Name string `json:"name"`
 	}
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
-		if !u.NameValidation.Check(body.Name) {
-			err = errBadUserName
+		if !s.nameValidation.Check(body.Name) {
+			err = s.errBadName
 			return
 		}
-		err = u.DB.EditName(r.Context(), getUserID(r), body.Name)
+		err = s.db.EditName(r.Context(), getUserID(r), body.Name)
 		if err != nil {
-			err = isUserNotFound(err)
+			err = s.isNotFound(err)
 			return
 		}
 		res = response{http.StatusNoContent, nil}
@@ -416,42 +480,42 @@ func (u *User) EditName() http.HandlerFunc {
 	})
 }
 
-func (u *User) EditPassword() http.HandlerFunc {
+func (s *UserService) EditPassword() http.HandlerFunc {
 	type body struct {
 		Password    userPassword `json:"password"`
 		NewPassword userPassword `json:"newPassword"`
 	}
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
 		defer memguard.WipeBytes(body.Password)
 		defer memguard.WipeBytes(body.NewPassword)
-		if !u.PasswordValidation.Check(body.NewPassword) {
-			err = errBadUserPassword
+		if !s.passwordValidation.Check(body.NewPassword) {
+			err = s.errBadPassword
 			return
 		}
 		id := getUserID(r)
-		user, err := u.DB.GetById(r.Context(), id)
+		user, err := s.db.GetById(r.Context(), id)
 		if err != nil {
-			err = isUserNotFound(err)
+			err = s.isNotFound(err)
 			return
 		}
-		match, _, err := u.Password.Compare(body.Password, user.Password)
+		match, _, err := s.password.Compare(body.Password, user.Password)
 		if err != nil {
 			return
 		}
 		if !match {
-			err = errInvalidUserPassword
+			err = s.errInvalidPassword
 			return
 		}
-		hash, err := u.Password.Hash(body.NewPassword)
+		hash, err := s.password.Hash(body.NewPassword)
 		if err != nil {
 			return
 		}
-		if err = u.DB.EditPassword(r.Context(), id, hash); err != nil {
-			err = isUserNotFound(err)
+		if err = s.db.EditPassword(r.Context(), id, hash); err != nil {
+			err = s.isNotFound(err)
 			return
 		}
 		res = response{http.StatusNoContent, nil}
@@ -459,37 +523,37 @@ func (u *User) EditPassword() http.HandlerFunc {
 	})
 }
 
-func (u *User) ResetPassword(limiter ratelimit.Limiter) http.HandlerFunc {
+func (s *UserService) ResetPassword(limiter ratelimit.Limiter) http.HandlerFunc {
 	type body struct {
 		Token    string       `json:"token"`
 		Password userPassword `json:"password"`
 	}
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
 		var body body
-		if err = decodeJSONBody(r, &body); err != nil {
+		if err = s.decodeJSONBody(r, &body); err != nil {
 			return
 		}
 		defer memguard.WipeBytes(body.Password)
-		if !u.PasswordValidation.Check(body.Password) {
-			err = errBadUserPassword
+		if !s.passwordValidation.Check(body.Password) {
+			err = s.errBadPassword
 			return
 		}
-		token, err := u.PasswordResetToken.Verify(body.Token)
+		token, err := s.passwordResetToken.Verify(body.Token)
 		if err != nil {
-			err = isBadUserToken(err)
+			err = s.isBadToken(err)
 			return
 		}
 		if !limiter.Allow(strconv.FormatInt(token.Id, 16)) {
-			err = errTooManyRequests
+			err = s.root.errTooManyRequests
 			return
 		}
-		hash, err := u.Password.Hash(body.Password)
+		hash, err := s.password.Hash(body.Password)
 		if err != nil {
 			return
 		}
-		err = u.DB.EditPassword(r.Context(), token.Id, hash)
+		err = s.db.EditPassword(r.Context(), token.Id, hash)
 		if err != nil {
-			err = isUserNotFound(err)
+			err = s.isNotFound(err)
 			return
 		}
 		res = response{http.StatusNoContent, nil}
@@ -497,10 +561,10 @@ func (u *User) ResetPassword(limiter ratelimit.Limiter) http.HandlerFunc {
 	})
 }
 
-func (u *User) Delete() http.HandlerFunc {
-	return createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
-		if err = u.DB.Delete(r.Context(), getUserID(r)); err != nil {
-			err = isUserNotFound(err)
+func (s *UserService) Delete() http.HandlerFunc {
+	return s.root.createHandler(func(w http.ResponseWriter, r *http.Request) (res response, err error) {
+		if err = s.db.Delete(r.Context(), getUserID(r)); err != nil {
+			err = s.isNotFound(err)
 			return
 		}
 		res = response{http.StatusNoContent, nil}
