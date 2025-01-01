@@ -2,18 +2,28 @@
 
 ## Introduction
 
-This is an http server that handles crucial user security procedures such as:
+This is an HTTP API built with Go that handles crucial user security procedures such as:
 
-- Account creation/deletion
+- Account creation and deletion
 - Login
 - Password reset
-- Password/email change
+- Password and email change
+
+Key components and technologies used are:
+
+- `chi` HTTP router
+- PostgreSQL database
+- JSON Web Tokens
+- SMTP
+- Argon2 key derivation function
+- `logrus` logger
 
 ## Todos
 
-- Rate limiting
+- Docker configuration
 - `memguard` package utilization
 - HTTP handler tests
+- Admin accounts
 
 ## Contributing
 
