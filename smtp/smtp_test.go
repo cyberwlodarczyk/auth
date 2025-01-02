@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 	}
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "maildev/maildev",
-		Tag:        "2.1.0",
+		Tag:        "2.2.1",
 		Env: []string{
 			"MAILDEV_INCOMING_USER=golang",
 			"MAILDEV_INCOMING_PASS=secret",

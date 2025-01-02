@@ -90,8 +90,16 @@ type service struct {
 	wg        sync.WaitGroup
 }
 
+func (s *service) connect() (*smtp.Client, error) {
+	if s.tlsConfig != nil {
+		return smtp.DialStartTLS(s.addr, s.tlsConfig)
+	} else {
+		return smtp.Dial(s.addr)
+	}
+}
+
 func (s *service) Ping() error {
-	c, err := smtp.Dial(s.addr)
+	c, err := s.connect()
 	if err != nil {
 		return err
 	}
@@ -106,18 +114,13 @@ func (s *service) Ping() error {
 }
 
 func (s *service) send(to string, tmpl *template.Template, data any) error {
-	c, err := smtp.Dial(s.addr)
+	c, err := s.connect()
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 	if err = c.Hello(s.name); err != nil {
 		return err
-	}
-	if s.tlsConfig != nil {
-		if err = c.StartTLS(s.tlsConfig); err != nil {
-			return err
-		}
 	}
 	if err = c.Auth(s.auth); err != nil {
 		return err

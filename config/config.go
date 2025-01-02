@@ -4,7 +4,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/caarlos0/env/v10"
+	"github.com/caarlos0/env/v11"
 	"github.com/cyberwlodarczyk/auth/handler"
 	"github.com/cyberwlodarczyk/auth/jwt"
 	"github.com/cyberwlodarczyk/auth/postgres"
@@ -93,18 +93,15 @@ type Config struct {
 }
 
 func New(file string) (*Config, error) {
-	var c Config
+	c, err := env.ParseAsWithOptions[Config](env.Options{RequiredIfNoDef: true})
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
 	if err = yaml.NewDecoder(f, yaml.Strict()).Decode(&c); err != nil {
-		return nil, err
-	}
-	if err := env.ParseWithOptions(
-		&c,
-		env.Options{RequiredIfNoDef: true},
-	); err != nil {
 		return nil, err
 	}
 	return &c, nil
