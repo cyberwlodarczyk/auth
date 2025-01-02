@@ -2,12 +2,18 @@ package postgres
 
 import (
 	"context"
+	"net"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Config struct {
-	URI string `env:"URI"`
+	Host     string `env:"HOST"`
+	Port     string `env:"PORT"`
+	Username string `env:"USERNAME"`
+	Password string `env:"PASSWORD"`
+	Database string `env:"DATABASE"`
 }
 
 type Service interface {
@@ -16,7 +22,13 @@ type Service interface {
 }
 
 func NewService(ctx context.Context, cfg Config) (Service, error) {
-	pool, err := pgxpool.New(ctx, cfg.URI)
+	u := &url.URL{
+		Scheme: "postgres",
+		Host:   net.JoinHostPort(cfg.Host, cfg.Port),
+		User:   url.UserPassword(cfg.Username, cfg.Password),
+		Path:   cfg.Database,
+	}
+	pool, err := pgxpool.New(ctx, u.String())
 	if err != nil {
 		return nil, err
 	}

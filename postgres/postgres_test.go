@@ -12,6 +12,13 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
+const (
+	id       = "5432/tcp"
+	username = "golang"
+	password = "secret"
+	database = "auth"
+)
+
 var svc Service
 
 func TestMain(m *testing.M) {
@@ -26,9 +33,9 @@ func TestMain(m *testing.M) {
 		Repository: "postgres",
 		Tag:        "17-alpine",
 		Env: []string{
-			"POSTGRES_PASSWORD=secret",
-			"POSTGRES_USER=golang",
-			"POSTGRES_DB=test",
+			fmt.Sprintf("POSTGRES_USER=%s", username),
+			fmt.Sprintf("POSTGRES_PASSWORD=%s", password),
+			fmt.Sprintf("POSTGRES_DB=%s", database),
 			"listen_addresses = '*'",
 		},
 	}, func(config *docker.HostConfig) {
@@ -42,7 +49,13 @@ func TestMain(m *testing.M) {
 	pool.MaxWait = 20 * time.Second
 	ctx := context.Background()
 	if err = pool.Retry(func() error {
-		svc, err = NewService(ctx, Config{fmt.Sprintf("postgres://golang:secret@%s/test?sslmode=disable", resource.GetHostPort("5432/tcp"))})
+		svc, err = NewService(ctx, Config{
+			Host:     resource.GetBoundIP(id),
+			Port:     resource.GetPort(id),
+			Username: username,
+			Password: password,
+			Database: database,
+		})
 		if err != nil {
 			return err
 		}
