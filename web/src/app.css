@@ -1,6 +1,7 @@
 :root {
   --background: #040425;
   --text: #ededfd;
+  --error: #ef9957;
   --primary-1: #918ef4;
   --primary-2: #a5a2f6;
   --surface-1: rgba(145, 142, 244, 0.25);
@@ -9,6 +10,7 @@
     0px 3px 4px 0px rgba(0, 0, 0, 0.14), 0px 1px 8px 0px rgba(0, 0, 0, 0.12);
   --shadow-2: 0px 3px 5px -1px rgba(0, 0, 0, 0.2),
     0px 6px 10px 0px rgba(0, 0, 0, 0.14), 0px 1px 18px 0px rgba(0, 0, 0, 0.12);
+  --border-radius: 4px;
 }
 
 * {

@@ -1,13 +1,12 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
-  import type { HTMLFormAttributes, EventHandler } from "svelte/elements";
+  import type { EventHandler } from "svelte/elements";
+  import type { ChildrenProps } from "./types";
 
-  interface Props extends HTMLFormAttributes {
-    children: Snippet<[]>;
+  interface Props extends ChildrenProps {
     onsubmit: EventHandler<SubmitEvent, HTMLFormElement>;
   }
 
-  let { children, onsubmit, ...props }: Props = $props();
+  let { children, onsubmit }: Props = $props();
 </script>
 
 <form
@@ -15,7 +14,7 @@
     event.preventDefault();
     onsubmit(event);
   }}
-  {...props}
+  novalidate
 >
   {@render children()}
 </form>

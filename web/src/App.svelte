@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Form, FormField, Heading, Input, Label } from "./lib";
+  import { Button, Field, Form, Heading } from "./lib";
 
   let email = $state("");
   let password = $state("");
@@ -12,14 +12,19 @@
 <main>
   <Form {onsubmit}>
     <Heading>Log In</Heading>
-    <FormField>
-      <Label for="email">Email</Label>
-      <Input id="email" type="email" autofocus bind:value={email} />
-    </FormField>
-    <FormField>
-      <Label for="password">Password</Label>
-      <Input id="password" type="password" bind:value={password} />
-    </FormField>
-    <Button type="submit">Log In</Button>
+    <Field
+      id="email"
+      label="Email"
+      bind:value={email}
+      type="email"
+      error="Invalid email"
+    />
+    <Field
+      id="password"
+      label="Password"
+      bind:value={password}
+      type="password"
+    />
+    <Button submit>Log In</Button>
   </Form>
 </main>

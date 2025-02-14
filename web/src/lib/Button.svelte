@@ -1,22 +1,21 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
-  import type { HTMLButtonAttributes } from "svelte/elements";
+  import type { ChildrenProps } from "./types";
 
-  interface Props extends HTMLButtonAttributes {
-    children: Snippet<[]>;
+  interface Props extends ChildrenProps {
+    submit?: boolean;
   }
 
-  let { children, ...props }: Props = $props();
+  let { children, submit }: Props = $props();
 </script>
 
-<button {...props}>{@render children()}</button>
+<button type={submit ? "submit" : null}>{@render children()}</button>
 
 <style>
   button {
     font-family: inherit;
     font-weight: 500;
     font-size: 1.15rem;
-    border-radius: 4px;
+    border-radius: var(--border-radius);
     padding: 0.5rem 1.25rem;
     border: none;
     outline: none;

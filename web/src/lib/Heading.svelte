@@ -1,15 +1,10 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
-  import type { HTMLAttributes } from "svelte/elements";
+  import type { ChildrenProps } from "./types";
 
-  interface Props extends HTMLAttributes<HTMLHeadingElement> {
-    children: Snippet<[]>;
-  }
-
-  let { children, ...props }: Props = $props();
+  let { children }: ChildrenProps = $props();
 </script>
 
-<h1 {...props}>{@render children()}</h1>
+<h1>{@render children()}</h1>
 
 <style>
   h1 {
