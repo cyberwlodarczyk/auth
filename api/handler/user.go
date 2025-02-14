@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/awnumar/memguard"
-	"github.com/cyberwlodarczyk/auth/argon2id"
-	"github.com/cyberwlodarczyk/auth/jwt"
-	"github.com/cyberwlodarczyk/auth/postgres"
-	"github.com/cyberwlodarczyk/auth/ratelimit"
-	"github.com/cyberwlodarczyk/auth/smtp"
-	"github.com/cyberwlodarczyk/auth/validation"
+	"github.com/cyberwlodarczyk/auth/api/argon2id"
+	"github.com/cyberwlodarczyk/auth/api/jwt"
+	"github.com/cyberwlodarczyk/auth/api/postgres"
+	"github.com/cyberwlodarczyk/auth/api/ratelimit"
+	"github.com/cyberwlodarczyk/auth/api/smtp"
+	"github.com/cyberwlodarczyk/auth/api/validation"
 )
 
 var errUserPassword = errors.New("user password has invalid encoding")

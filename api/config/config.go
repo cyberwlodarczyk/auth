@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/cyberwlodarczyk/auth/handler"
-	"github.com/cyberwlodarczyk/auth/jwt"
-	"github.com/cyberwlodarczyk/auth/postgres"
-	"github.com/cyberwlodarczyk/auth/ratelimit"
-	"github.com/cyberwlodarczyk/auth/smtp"
-	"github.com/cyberwlodarczyk/auth/validation"
+	"github.com/cyberwlodarczyk/auth/api/handler"
+	"github.com/cyberwlodarczyk/auth/api/jwt"
+	"github.com/cyberwlodarczyk/auth/api/postgres"
+	"github.com/cyberwlodarczyk/auth/api/ratelimit"
+	"github.com/cyberwlodarczyk/auth/api/smtp"
+	"github.com/cyberwlodarczyk/auth/api/validation"
 	"github.com/goccy/go-yaml"
 )
 

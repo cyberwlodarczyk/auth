@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cyberwlodarczyk/auth/jwt"
-	"github.com/cyberwlodarczyk/auth/ratelimit"
+	"github.com/cyberwlodarczyk/auth/api/jwt"
+	"github.com/cyberwlodarczyk/auth/api/ratelimit"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )

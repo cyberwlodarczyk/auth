@@ -1,4 +1,4 @@
-module github.com/cyberwlodarczyk/auth
+module github.com/cyberwlodarczyk/auth/api
 
 go 1.23
 
