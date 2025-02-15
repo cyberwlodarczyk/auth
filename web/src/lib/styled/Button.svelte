@@ -14,9 +14,10 @@
   button {
     font-family: inherit;
     font-weight: 500;
-    font-size: 1.15rem;
+    font-size: 1rem;
     border-radius: var(--border-radius);
     padding: 0.5rem 1.25rem;
+    width: 17rem;
     border: none;
     outline: none;
     cursor: pointer;

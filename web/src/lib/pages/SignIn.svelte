@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Field, Form, Heading, Link } from "../styled";
+  import { Button, Field, Form, Heading, Link, BottomLink } from "../styled";
 
   const state = $state({
     email: "",
@@ -9,9 +9,13 @@
   function onsubmit() {}
 </script>
 
+<svelte:head>
+  <title>Sign in</title>
+</svelte:head>
+
 <main>
   <Form {onsubmit}>
-    <Heading>Sign In</Heading>
+    <Heading>Sign in</Heading>
     <Field id="email" label="Email" bind:value={state.email} type="email" />
     <Field
       id="password"
@@ -19,16 +23,12 @@
       bind:value={state.password}
       type="password"
     />
-    <Button submit>Sign In</Button>
+    <div style:width="100%">
+      <Link href="/reset-password">Forgot password?</Link>
+    </div>
+    <Button submit>Sign in</Button>
   </Form>
-  <Link href="/sign-up">Sign Up</Link>
+  <BottomLink question="Don't have an account yet?" href="/sign-up">
+    Sign up
+  </BottomLink>
 </main>
-
-<style>
-  main {
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-    align-items: center;
-  }
-</style>

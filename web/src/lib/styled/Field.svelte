@@ -36,23 +36,26 @@
   }
 
   label {
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 500;
     margin-left: var(--border-radius);
   }
 
   input {
-    all: unset;
-    font-size: 1.15rem;
+    border: none;
+    outline: none;
+    font-size: 1rem;
+    font-family: inherit;
+    color: inherit;
     border-radius: var(--border-radius);
-    width: 225px;
+    width: 17rem;
     padding: 0.5rem 1rem;
     transition: background-color 0.2s;
-    background-color: var(--surface-1);
+    background-color: var(--primary-transparent-1);
   }
 
   input:focus {
-    background-color: var(--surface-2);
+    background-color: var(--primary-transparent-2);
   }
 
   p {

@@ -20,11 +20,13 @@
 <style>
   a {
     text-decoration: none;
-    padding: 0.5rem;
+    outline: none;
+    font-size: 0.875rem;
     color: var(--primary-1);
   }
 
-  a:hover {
+  a:hover,
+  a:focus-visible {
     text-decoration: underline;
   }
 </style>

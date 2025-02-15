@@ -1,11 +1,12 @@
 :root {
-  --background: #040425;
-  --text: #ededfd;
-  --error: #ef9957;
-  --primary-1: #918ef4;
-  --primary-2: #a5a2f6;
-  --surface-1: rgba(145, 142, 244, 0.25);
-  --surface-2: rgba(145, 142, 244, 0.3);
+  --background: rgb(4, 4, 37);
+  --text: rgb(237, 237, 253);
+  --error: rgb(239, 153, 87);
+  --primary-1: rgb(145, 142, 244);
+  --primary-2: rgb(165, 162, 246);
+  --primary-transparent-1: rgba(145, 142, 244, 0.15);
+  --primary-transparent-2: rgba(145, 142, 244, 0.2);
+  --gray: rgb(122, 122, 122);
   --shadow-1: 0px 3px 3px -2px rgba(0, 0, 0, 0.2),
     0px 3px 4px 0px rgba(0, 0, 0, 0.14), 0px 1px 8px 0px rgba(0, 0, 0, 0.12);
   --shadow-2: 0px 3px 5px -1px rgba(0, 0, 0, 0.2),
