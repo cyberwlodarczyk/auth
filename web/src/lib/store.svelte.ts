@@ -1,5 +1,5 @@
 export const store = $state({
-  location: window.location.pathname,
+  location: decodeURIComponent(window.location.pathname),
 });
 
 export const navigate = (path: string) => {
@@ -8,5 +8,5 @@ export const navigate = (path: string) => {
 };
 
 window.addEventListener("popstate", () => {
-  store.location = window.location.pathname;
+  store.location = decodeURIComponent(window.location.pathname);
 });

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Field, Form, Heading, Link, BottomLink } from "../styled";
+  import { Button, Field, Form, Heading, BottomLink } from "../styled";
 
   const state = $state({
     email: "",
