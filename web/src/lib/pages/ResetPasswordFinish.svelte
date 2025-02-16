@@ -1,5 +1,11 @@
 <script lang="ts">
   import { Button, Field, Form, Heading } from "../styled";
+  import {
+    defaultFieldState,
+    isFieldEmpty,
+    isPasswordInvalid,
+    arePasswordsDifferent,
+  } from "../utils";
 
   interface Props {
     token: string;
@@ -11,12 +17,20 @@
     console.log(token);
   });
 
-  const state = $state({
-    newPassword: "",
-    confirmNewPassword: "",
-  });
+  let newPassword = $state(defaultFieldState());
+  let confirmNewPassword = $state(defaultFieldState());
 
-  function onsubmit() {}
+  function onsubmit() {
+    if (
+      isFieldEmpty(newPassword) ||
+      isPasswordInvalid(newPassword) ||
+      isFieldEmpty(confirmNewPassword) ||
+      arePasswordsDifferent(newPassword, confirmNewPassword)
+    ) {
+      return;
+    }
+    console.log(newPassword.value, confirmNewPassword.value);
+  }
 </script>
 
 <svelte:head>
@@ -29,13 +43,15 @@
     <Field
       id="new-password"
       label="New password"
-      bind:value={state.newPassword}
+      bind:value={newPassword.value}
+      bind:error={newPassword.error}
       type="password"
     />
     <Field
       id="confirm-new-password"
       label="Confirm new password"
-      bind:value={state.confirmNewPassword}
+      bind:value={confirmNewPassword.value}
+      bind:error={confirmNewPassword.error}
       type="password"
     />
     <Button submit>Reset password</Button>

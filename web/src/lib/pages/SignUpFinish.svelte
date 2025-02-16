@@ -1,5 +1,11 @@
 <script lang="ts">
   import { Button, Field, Form, Heading } from "../styled";
+  import {
+    arePasswordsDifferent,
+    defaultFieldState,
+    isFieldEmpty,
+    isPasswordInvalid,
+  } from "../utils";
 
   interface Props {
     token: string;
@@ -11,13 +17,22 @@
     console.log(token);
   });
 
-  const state = $state({
-    name: "",
-    password: "",
-    confirmPassword: "",
-  });
+  let name = $state(defaultFieldState());
+  let password = $state(defaultFieldState());
+  let confirmPassword = $state(defaultFieldState());
 
-  function onsubmit() {}
+  function onsubmit() {
+    if (
+      isFieldEmpty(name) ||
+      isFieldEmpty(password) ||
+      isPasswordInvalid(password) ||
+      isFieldEmpty(confirmPassword) ||
+      arePasswordsDifferent(password, confirmPassword)
+    ) {
+      return;
+    }
+    console.log(name.value, password.value, confirmPassword.value);
+  }
 </script>
 
 <svelte:head>
@@ -27,17 +42,19 @@
 <main>
   <Form {onsubmit}>
     <Heading>Sign up</Heading>
-    <Field id="name" label="Name" bind:value={state.name} />
+    <Field id="name" label="Name" bind:value={name.value} error={name.error} />
     <Field
       id="password"
       label="Password"
-      bind:value={state.password}
+      bind:value={password.value}
+      bind:error={password.error}
       type="password"
     />
     <Field
       id="confirm-password"
       label="Confirm password"
-      bind:value={state.confirmPassword}
+      bind:value={confirmPassword.value}
+      bind:error={confirmPassword.error}
       type="password"
     />
     <Button submit>Sign up</Button>

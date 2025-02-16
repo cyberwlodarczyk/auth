@@ -1,15 +1,20 @@
 <script lang="ts">
   import type { HTMLInputTypeAttribute } from "svelte/elements";
+  import type { FieldState } from "../utils";
 
-  interface Props {
+  interface Props extends FieldState {
     id: string;
-    value: string;
     label: string;
-    error?: string;
     type?: HTMLInputTypeAttribute;
   }
 
-  let { id, value = $bindable(), label, error, type }: Props = $props();
+  let {
+    id,
+    value = $bindable(),
+    error = $bindable(),
+    label,
+    type,
+  }: Props = $props();
   let errorId = `${id}-error`;
 </script>
 
@@ -19,6 +24,9 @@
     {id}
     {type}
     bind:value
+    oninput={() => {
+      error = null;
+    }}
     aria-required={true}
     aria-invalid={error ? true : null}
     aria-describedby={error ? errorId : null}
@@ -33,6 +41,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    width: 17rem;
   }
 
   label {
@@ -47,8 +56,8 @@
     font-size: 1rem;
     font-family: inherit;
     color: inherit;
+    width: 100%;
     border-radius: var(--border-radius);
-    width: 17rem;
     padding: 0.5rem 1rem;
     transition: background-color 0.2s;
     background-color: var(--primary-transparent-1);

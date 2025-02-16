@@ -1,12 +1,20 @@
 <script lang="ts">
   import { Button, Field, Form, Heading, Link, BottomLink } from "../styled";
+  import { defaultFieldState, isFieldEmpty, isEmailInvalid } from "../utils";
 
-  const state = $state({
-    email: "",
-    password: "",
-  });
+  let email = $state(defaultFieldState());
+  let password = $state(defaultFieldState());
 
-  function onsubmit() {}
+  function onsubmit() {
+    if (
+      isFieldEmpty(email) ||
+      isEmailInvalid(email) ||
+      isFieldEmpty(password)
+    ) {
+      return;
+    }
+    console.log(email.value, password.value);
+  }
 </script>
 
 <svelte:head>
@@ -16,11 +24,18 @@
 <main>
   <Form {onsubmit}>
     <Heading>Sign in</Heading>
-    <Field id="email" label="Email" bind:value={state.email} type="email" />
+    <Field
+      id="email"
+      label="Email"
+      bind:value={email.value}
+      bind:error={email.error}
+      type="email"
+    />
     <Field
       id="password"
       label="Password"
-      bind:value={state.password}
+      bind:value={password.value}
+      bind:error={password.error}
       type="password"
     />
     <div style:width="100%">
