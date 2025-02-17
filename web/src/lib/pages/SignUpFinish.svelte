@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { signUpFinish } from "../api";
+  import { navigate } from "../store.svelte";
   import { Button, Field, Form, Heading } from "../styled";
   import {
     arePasswordsDifferent,
@@ -13,15 +15,11 @@
 
   let { token }: Props = $props();
 
-  $effect(() => {
-    console.log(token);
-  });
-
   let name = $state(defaultFieldState());
   let password = $state(defaultFieldState());
   let confirmPassword = $state(defaultFieldState());
 
-  function onsubmit() {
+  async function onsubmit() {
     if (
       isFieldEmpty(name) ||
       isFieldEmpty(password) ||
@@ -31,7 +29,8 @@
     ) {
       return;
     }
-    console.log(name.value, password.value, confirmPassword.value);
+    await signUpFinish(token, name.value, password.value);
+    navigate("/");
   }
 </script>
 

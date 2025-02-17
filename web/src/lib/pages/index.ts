@@ -1,3 +1,4 @@
+export { default as CheckMail } from "./CheckMail.svelte";
 export { default as Home } from "./Home.svelte";
 export { default as NotFound } from "./NotFound.svelte";
 export { default as ResetPasswordFinish } from "./ResetPasswordFinish.svelte";

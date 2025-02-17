@@ -1,14 +1,17 @@
 <script lang="ts">
+  import { signUpInit } from "../api";
+  import { navigate } from "../store.svelte";
   import { Button, Field, Form, Heading, BottomLink } from "../styled";
   import { defaultFieldState, isFieldEmpty, isEmailInvalid } from "../utils";
 
   let email = $state(defaultFieldState());
 
-  function onsubmit() {
+  async function onsubmit() {
     if (isFieldEmpty(email) || isEmailInvalid(email)) {
       return;
     }
-    console.log(email.value);
+    await signUpInit(email.value);
+    navigate("/sign-up/mail");
   }
 </script>
 

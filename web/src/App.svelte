@@ -8,6 +8,7 @@
     SignUpFinish,
     SignUpInit,
     Home,
+    CheckMail,
   } from "./lib";
 
   const segments = $derived(store.location.split("/").filter(Boolean));
@@ -26,10 +27,18 @@
     <NotFound />
   {/if}
 {:else if segments.length === 2}
-  {#if segments[0] === "sign-up"}
-    <SignUpFinish token={segments[1]} />
-  {:else if segments[0] === "reset-password"}
-    <ResetPasswordFinish token={segments[1]} />
+  {#if segments[0] === "sign-up" && segments[1] === "mail"}
+    <CheckMail resend="/sign-up" title="Sign up" />
+  {:else if segments[0] === "reset-password" && segments[1] === "mail"}
+    <CheckMail resend="/reset-password" title="Reset password" />
+  {:else}
+    <NotFound />
+  {/if}
+{:else if segments.length === 3}
+  {#if segments[0] === "sign-up" && segments[1] === "finish"}
+    <SignUpFinish token={segments[2]} />
+  {:else if segments[0] === "reset-password" && segments[1] === "finish"}
+    <ResetPasswordFinish token={segments[2]} />
   {:else}
     <NotFound />
   {/if}

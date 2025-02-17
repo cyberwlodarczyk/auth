@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { signIn } from "../api";
   import { Button, Field, Form, Heading, Link, BottomLink } from "../styled";
   import { defaultFieldState, isFieldEmpty, isEmailInvalid } from "../utils";
 
   let email = $state(defaultFieldState());
   let password = $state(defaultFieldState());
 
-  function onsubmit() {
+  async function onsubmit() {
     if (
       isFieldEmpty(email) ||
       isEmailInvalid(email) ||
@@ -13,7 +14,7 @@
     ) {
       return;
     }
-    console.log(email.value, password.value);
+    await signIn(email.value, password.value);
   }
 </script>
 

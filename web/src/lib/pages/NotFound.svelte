@@ -8,13 +8,13 @@
 
 <main>
   <p>404</p>
-  <Heading>Not found</Heading>
+  <Heading>Page not found</Heading>
 </main>
 
 <style>
   p {
     text-align: center;
-    font-size: 5rem;
+    font-size: 3rem;
     font-weight: 700;
     color: var(--primary-1);
   }

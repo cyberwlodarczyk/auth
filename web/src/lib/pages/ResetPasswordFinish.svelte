@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { resetPasswordFinish } from "../api";
+  import { navigate } from "../store.svelte";
   import { Button, Field, Form, Heading } from "../styled";
   import {
     defaultFieldState,
@@ -13,14 +15,10 @@
 
   let { token }: Props = $props();
 
-  $effect(() => {
-    console.log(token);
-  });
-
   let newPassword = $state(defaultFieldState());
   let confirmNewPassword = $state(defaultFieldState());
 
-  function onsubmit() {
+  async function onsubmit() {
     if (
       isFieldEmpty(newPassword) ||
       isPasswordInvalid(newPassword) ||
@@ -29,7 +27,8 @@
     ) {
       return;
     }
-    console.log(newPassword.value, confirmNewPassword.value);
+    await resetPasswordFinish(token, newPassword.value);
+    navigate("/");
   }
 </script>
 

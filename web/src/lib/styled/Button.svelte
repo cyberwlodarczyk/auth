@@ -3,12 +3,15 @@
 
   interface Props extends ChildrenProps {
     submit?: boolean;
+    text?: boolean;
   }
 
-  let { children, submit }: Props = $props();
+  let { children, submit, text }: Props = $props();
 </script>
 
-<button type={submit ? "submit" : null}>{@render children()}</button>
+<button class={{ text }} type={submit ? "submit" : null}
+  >{@render children()}</button
+>
 
 <style>
   button {
@@ -33,5 +36,16 @@
   button:focus-visible {
     background-color: var(--primary-2);
     box-shadow: var(--shadow-2);
+  }
+
+  button.text {
+    background: transparent;
+    color: var(--primary-1);
+    box-shadow: none;
+    font-size: 0.875rem;
+    width: unset;
+    transition:
+      color 0.2s,
+      background-color 0.2s;
   }
 </style>
