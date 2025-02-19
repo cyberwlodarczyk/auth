@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resetPasswordFinish } from "../api";
-  import { navigate } from "../store.svelte";
+  import { store } from "../store.svelte";
   import { Button, Field, Form, Heading } from "../styled";
   import {
     defaultFieldState,
@@ -28,7 +28,7 @@
       return;
     }
     await resetPasswordFinish(token, newPassword.value);
-    navigate("/");
+    store.location = "/";
   }
 </script>
 

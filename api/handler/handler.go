@@ -176,7 +176,8 @@ func (s *Service) decodeJSONBody(r *http.Request, v any) error {
 			errors.As(err, &unmarshalTypeErr) ||
 			errors.Is(err, io.ErrUnexpectedEOF) ||
 			errors.Is(err, io.EOF) ||
-			strings.HasPrefix(err.Error(), "json: unknown field ") {
+			strings.HasPrefix(err.Error(), "json: unknown field ") ||
+			strings.Contains(err.Error(), "base64") {
 			return s.errMalformedBody
 		}
 		var maxBytesErr *http.MaxBytesError

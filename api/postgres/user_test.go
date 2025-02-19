@@ -20,19 +20,19 @@ func TestUserService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id1, createdAt1, err := userSvc.Create(ctx, CreateUserOpts{Email: email1, Name: name1, Password: password1})
+	expected1, err := userSvc.Create(ctx, CreateUserOpts{Email: email1, Name: name1, Password: password1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected1 := User{Id: id1, Email: email1, Name: name1, Password: password1, CreatedAt: createdAt1}
-	if _, _, err = userSvc.Create(ctx, CreateUserOpts{Email: email1, Name: name1, Password: password1}); err != ErrAlreadyExists {
+	id1 := expected1.Id
+	if _, err = userSvc.Create(ctx, CreateUserOpts{Email: email1, Name: name1, Password: password1}); err != ErrAlreadyExists {
 		t.Fatalf("expected error: %v, got: %v", ErrAlreadyExists, err)
 	}
-	id2, createdAt2, err := userSvc.Create(ctx, CreateUserOpts{Email: email2, Name: name2, Password: password2})
+	expected2, err := userSvc.Create(ctx, CreateUserOpts{Email: email2, Name: name2, Password: password2})
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected2 := User{Id: id2, Email: email2, Name: name2, Password: password2, CreatedAt: createdAt2}
+	id2 := expected2.Id
 	user, err := userSvc.GetById(ctx, id1)
 	if err != nil {
 		t.Fatal(err)

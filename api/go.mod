@@ -3,7 +3,6 @@ module github.com/cyberwlodarczyk/auth/api
 go 1.23
 
 require (
-	github.com/awnumar/memguard v0.22.5
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6
 	github.com/emersion/go-smtp v0.21.3
@@ -23,7 +22,6 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/awnumar/memcall v0.4.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/docker/cli v27.4.1+incompatible // indirect

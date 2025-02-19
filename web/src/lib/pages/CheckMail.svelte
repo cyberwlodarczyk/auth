@@ -2,16 +2,11 @@
   import { Heading, BottomLink } from "../styled";
 
   interface Props {
-    resend: string;
-    title: string;
+    mail: boolean;
   }
 
-  let { resend, title }: Props = $props();
+  let { mail = $bindable() }: Props = $props();
 </script>
-
-<svelte:head>
-  <title>{title}</title>
-</svelte:head>
 
 <main>
   <svg
@@ -28,8 +23,11 @@
     ></path></svg
   >
   <Heading small>Check your mailbox for further steps</Heading>
-  <BottomLink question="Didn't receive an email?" href={resend}
-    >Resend</BottomLink
+  <BottomLink
+    question="Didn't receive an email?"
+    onclick={() => {
+      mail = false;
+    }}>Resend</BottomLink
   >
 </main>
 

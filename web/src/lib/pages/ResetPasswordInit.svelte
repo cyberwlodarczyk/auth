@@ -1,8 +1,14 @@
 <script lang="ts">
   import { resetPasswordInit } from "../api";
-  import { navigate } from "../store.svelte";
+  import { store } from "../store.svelte";
   import { Button, Field, Form, Heading, BottomLink } from "../styled";
   import { defaultFieldState, isFieldEmpty, isEmailInvalid } from "../utils";
+
+  interface Props {
+    mail: boolean;
+  }
+
+  let { mail = $bindable() }: Props = $props();
 
   let email = $state(defaultFieldState());
 
@@ -11,7 +17,7 @@
       return;
     }
     await resetPasswordInit(email.value);
-    navigate("/reset-password/mail");
+    mail = true;
   }
 </script>
 

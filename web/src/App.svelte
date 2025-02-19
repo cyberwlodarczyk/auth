@@ -2,45 +2,31 @@
   import {
     store,
     NotFound,
-    ResetPasswordFinish,
-    ResetPasswordInit,
+    ResetPassword,
     SignIn,
-    SignUpFinish,
-    SignUpInit,
+    SignUp,
     Home,
-    CheckMail,
+    Redirect,
   } from "./lib";
-
-  const segments = $derived(store.location.split("/").filter(Boolean));
 </script>
 
-{#if segments.length === 0}
-  <Home />
-{:else if segments.length === 1}
-  {#if segments[0] === "sign-in"}
+{#if store.user === undefined}
+  {null}
+{:else if store.location === "/"}
+  {#if store.user === null}
+    <Redirect to="/sign-in" />
+  {:else if store.location === "/"}
+    <Home user={store.user} />
+  {/if}
+{:else if ["/sign-up", "/sign-in", "/reset-password"].includes(store.location)}
+  {#if store.user !== null}
+    <Redirect to="/" />
+  {:else if store.location === "/sign-up"}
+    <SignUp />
+  {:else if store.location === "/sign-in"}
     <SignIn />
-  {:else if segments[0] === "sign-up"}
-    <SignUpInit />
-  {:else if segments[0] === "reset-password"}
-    <ResetPasswordInit />
-  {:else}
-    <NotFound />
-  {/if}
-{:else if segments.length === 2}
-  {#if segments[0] === "sign-up" && segments[1] === "mail"}
-    <CheckMail resend="/sign-up" title="Sign up" />
-  {:else if segments[0] === "reset-password" && segments[1] === "mail"}
-    <CheckMail resend="/reset-password" title="Reset password" />
-  {:else}
-    <NotFound />
-  {/if}
-{:else if segments.length === 3}
-  {#if segments[0] === "sign-up" && segments[1] === "finish"}
-    <SignUpFinish token={segments[2]} />
-  {:else if segments[0] === "reset-password" && segments[1] === "finish"}
-    <ResetPasswordFinish token={segments[2]} />
-  {:else}
-    <NotFound />
+  {:else if store.location === "/reset-password"}
+    <ResetPassword />
   {/if}
 {:else}
   <NotFound />

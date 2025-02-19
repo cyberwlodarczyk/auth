@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { EventHandler } from "svelte/elements";
-  import type { ChildrenProps } from "./types";
+  import type { ChildrenProps } from "../types";
 
   interface Props extends ChildrenProps {
     onsubmit: EventHandler<SubmitEvent, HTMLFormElement>;

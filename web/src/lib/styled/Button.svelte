@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ChildrenProps } from "./types";
+  import type { ChildrenProps } from "../types";
 
   interface Props extends ChildrenProps {
     submit?: boolean;

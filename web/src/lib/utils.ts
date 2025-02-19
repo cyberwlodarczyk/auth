@@ -38,7 +38,7 @@ export function isPasswordInvalid(state: FieldState) {
 export function arePasswordsDifferent(state: FieldState, confirm: FieldState) {
   if (state.value !== confirm.value) {
     confirm.error = "Passwords do not match";
-    return false;
+    return true;
   }
-  return true;
+  return false;
 }

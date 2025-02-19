@@ -30,6 +30,7 @@
     aria-required={true}
     aria-invalid={error ? true : null}
     aria-describedby={error ? errorId : null}
+    autocomplete="on"
   />
   {#if error}
     <p id={errorId}>{error}</p>

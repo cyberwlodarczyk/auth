@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { navigate } from "../store.svelte";
-  import type { ChildrenProps } from "./types";
+  import { store } from "../store.svelte";
+  import type { ChildrenProps } from "../types";
 
   interface Props extends ChildrenProps {
     href: string;
@@ -13,7 +13,7 @@
   {href}
   onclick={(event) => {
     event.preventDefault();
-    navigate(href);
+    store.location = href;
   }}>{@render children()}</a
 >
 

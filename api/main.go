@@ -63,7 +63,7 @@ func run(cfg *config.Config) error {
 	defer rl.Close()
 	r := chi.NewRouter()
 	r.Use(root.WithRequestID)
-	r.Use(root.WithRequestID)
+	r.Use(root.WithRequestTime)
 	r.Use(root.WithRateLimit(rl.NewLimiter(cfg.RateLimit.IP)))
 	r.Use(root.WithBodyLimit(int64(cfg.HTTP.BodyLimit)))
 	r.NotFound(root.NotFound())

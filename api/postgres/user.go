@@ -8,17 +8,17 @@ import (
 )
 
 type User struct {
-	Id        int64
-	Email     string
-	Name      string
-	Password  string
-	CreatedAt time.Time
+	Id        int64     `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	Password  string    `json:"-"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type UserService interface {
 	GetById(context.Context, int64) (User, error)
 	GetByEmail(context.Context, string) (User, error)
-	Create(context.Context, CreateUserOpts) (int64, time.Time, error)
+	Create(context.Context, CreateUserOpts) (User, error)
 	EditEmail(context.Context, int64, string) error
 	EditName(context.Context, int64, string) error
 	EditPassword(context.Context, int64, string) error
@@ -80,7 +80,7 @@ type CreateUserOpts struct {
 	Password string
 }
 
-func (s *userService) Create(ctx context.Context, opts CreateUserOpts) (id int64, createdAt time.Time, err error) {
+func (s *userService) Create(ctx context.Context, opts CreateUserOpts) (user User, err error) {
 	err = isUnique(s.pool.QueryRow(
 		ctx,
 		`
@@ -91,7 +91,13 @@ func (s *userService) Create(ctx context.Context, opts CreateUserOpts) (id int64
 		opts.Email,
 		opts.Name,
 		opts.Password,
-	).Scan(&id, &createdAt))
+	).Scan(&user.Id, &user.CreatedAt))
+	if err != nil {
+		return
+	}
+	user.Email = opts.Email
+	user.Name = opts.Name
+	user.Password = opts.Password
 	return
 }
 

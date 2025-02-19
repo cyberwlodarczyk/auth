@@ -1,6 +1,6 @@
 <script lang="ts">
   import { signUpFinish } from "../api";
-  import { navigate } from "../store.svelte";
+  import { store } from "../store.svelte";
   import { Button, Field, Form, Heading } from "../styled";
   import {
     arePasswordsDifferent,
@@ -30,7 +30,7 @@
       return;
     }
     await signUpFinish(token, name.value, password.value);
-    navigate("/");
+    store.location = "/";
   }
 </script>
 
