@@ -1,24 +1,24 @@
 <script lang="ts">
   import type { ChildrenProps } from "../types";
-  import { Link } from ".";
+  import { Link, Button } from ".";
 
   interface Props extends ChildrenProps {
-    question?: string;
+    description?: string;
     href?: string;
     onclick?: () => void;
   }
 
-  let { children, href, onclick, question }: Props = $props();
+  let { children, href, onclick, description }: Props = $props();
 </script>
 
 <div>
-  {#if question}
-    <p>{question}</p>
+  {#if description}
+    <p>{description}</p>
   {/if}
   {#if href}
     <Link {href}>{@render children()}</Link>
   {:else if onclick}
-    <button {onclick}>{@render children()}</button>
+    <Button text {onclick}>{@render children()}</Button>
   {/if}
 </div>
 

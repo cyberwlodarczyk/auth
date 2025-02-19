@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Heading, BottomLink } from "../styled";
+  import { Heading, SecondaryAction } from "../styled";
 
   interface Props {
     mail: boolean;
@@ -23,11 +23,11 @@
     ></path></svg
   >
   <Heading small>Check your mailbox for further steps</Heading>
-  <BottomLink
-    question="Didn't receive an email?"
+  <SecondaryAction
+    description="Didn't receive an email?"
     onclick={() => {
       mail = false;
-    }}>Resend</BottomLink
+    }}>Resend</SecondaryAction
   >
 </main>
 

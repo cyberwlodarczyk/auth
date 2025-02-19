@@ -1,6 +1,13 @@
 <script lang="ts">
   import { signIn } from "../api";
-  import { Button, Field, Form, Heading, Link, BottomLink } from "../styled";
+  import {
+    Button,
+    Field,
+    Form,
+    Heading,
+    Link,
+    SecondaryAction,
+  } from "../styled";
   import { defaultFieldState, isFieldEmpty, isEmailInvalid } from "../utils";
 
   let email = $state(defaultFieldState());
@@ -44,7 +51,7 @@
     </div>
     <Button submit>Sign in</Button>
   </Form>
-  <BottomLink question="Don't have an account yet?" href="/sign-up">
+  <SecondaryAction description="Don't have an account yet?" href="/sign-up">
     Sign up
-  </BottomLink>
+  </SecondaryAction>
 </main>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resetPasswordInit } from "../api";
   import { store } from "../store.svelte";
-  import { Button, Field, Form, Heading, BottomLink } from "../styled";
+  import { Button, Field, Form, Heading, SecondaryAction } from "../styled";
   import { defaultFieldState, isFieldEmpty, isEmailInvalid } from "../utils";
 
   interface Props {
@@ -37,5 +37,5 @@
     />
     <Button submit>Reset password</Button>
   </Form>
-  <BottomLink href="/sign-in">Back to sign in</BottomLink>
+  <SecondaryAction href="/sign-in">Back to sign in</SecondaryAction>
 </main>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { signUpInit } from "../api";
   import { store } from "../store.svelte";
-  import { Button, Field, Form, Heading, BottomLink } from "../styled";
+  import { Button, Field, Form, Heading, SecondaryAction } from "../styled";
   import { defaultFieldState, isFieldEmpty, isEmailInvalid } from "../utils";
 
   interface Props {
@@ -37,7 +37,7 @@
     />
     <Button submit>Sign up</Button>
   </Form>
-  <BottomLink question="Already have an account?" href="/sign-in">
+  <SecondaryAction description="Already have an account?" href="/sign-in">
     Sign in
-  </BottomLink>
+  </SecondaryAction>
 </main>

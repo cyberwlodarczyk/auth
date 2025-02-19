@@ -4,12 +4,13 @@
   interface Props extends ChildrenProps {
     submit?: boolean;
     text?: boolean;
+    onclick?: () => void;
   }
 
-  let { children, submit, text }: Props = $props();
+  let { children, submit, text, onclick }: Props = $props();
 </script>
 
-<button class={{ text }} type={submit ? "submit" : null}
+<button {onclick} class={{ text }} type={submit ? "submit" : null}
   >{@render children()}</button
 >
 
@@ -39,13 +40,17 @@
   }
 
   button.text {
+    font-weight: 400;
     background: transparent;
-    color: var(--primary-1);
+    padding: 0;
     box-shadow: none;
+    color: var(--primary-1);
     font-size: 0.875rem;
     width: unset;
-    transition:
-      color 0.2s,
-      background-color 0.2s;
+  }
+
+  button.text:hover,
+  button.text:focus-visible {
+    text-decoration: underline;
   }
 </style>
