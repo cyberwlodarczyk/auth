@@ -1,16 +1,19 @@
 <script lang="ts">
+  import { store } from "../store.svelte";
   import { Heading } from "../styled";
-  import type { User } from "../api";
-
-  interface Props {
-    user: User;
-  }
-
-  let { user }: Props = $props();
 </script>
 
 <svelte:head>
   <title>Home</title>
 </svelte:head>
 
-<Heading>Hi, {user.name}!</Heading>
+<Heading>Hi, {store.user!.name}!</Heading>
+{#if store.sudo}
+  <p>Sudo</p>
+{/if}
+
+<style>
+  p {
+    text-transform: uppercase;
+  }
+</style>

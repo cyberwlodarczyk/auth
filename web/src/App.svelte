@@ -8,16 +8,19 @@
     Home,
     ChangePassword,
     Redirect,
+    EnterSudoMode,
   } from "./lib";
 </script>
 
 {#if store.user === undefined}
   {null}
-{:else if ["/", "/change-password"].includes(store.location)}
+{:else if ["/", "/enter-sudo-mode", "/change-password"].includes(store.location)}
   {#if store.user === null}
     <Redirect to="/sign-in" />
   {:else if store.location === "/"}
-    <Home user={store.user} />
+    <Home />
+  {:else if store.location === "/enter-sudo-mode"}
+    <EnterSudoMode />
   {:else if store.location === "/change-password"}
     <ChangePassword />
   {/if}

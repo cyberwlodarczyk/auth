@@ -101,3 +101,9 @@ export async function changePassword(oldPassword: string, newPassword: string) {
     newPassword: toBase64(newPassword),
   });
 }
+
+export async function enterSudoMode(password: string) {
+  await request("/user/token/sudo", "POST", {
+    password: toBase64(password),
+  });
+}

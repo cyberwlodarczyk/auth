@@ -1,25 +1,41 @@
 import { getUser, type User } from "./api";
 
+const SESSION_KEY = "session";
+const SUDO_KEY = "sudo";
+
 export interface Store {
   location: string;
   session: string | null;
+  sudo: string | null;
   user?: User | null;
 }
 
 export const store: Store = $state({
   location: decodeURIComponent(window.location.pathname),
-  session: localStorage.getItem("session"),
+  session: localStorage.getItem(SESSION_KEY),
+  sudo: localStorage.getItem(SUDO_KEY),
 });
 
 $effect.root(() => {
   $effect(() => {
-    if (store.session === localStorage.getItem("session")) {
+    if (store.session === localStorage.getItem(SESSION_KEY)) {
       return;
     }
     if (store.session) {
-      localStorage.setItem("session", store.session);
+      localStorage.setItem(SESSION_KEY, store.session);
     } else {
-      localStorage.removeItem("session");
+      localStorage.removeItem(SESSION_KEY);
+    }
+  });
+
+  $effect(() => {
+    if (store.sudo === localStorage.getItem(SUDO_KEY)) {
+      return;
+    }
+    if (store.sudo) {
+      localStorage.setItem(SUDO_KEY, store.sudo);
+    } else {
+      localStorage.removeItem(SUDO_KEY);
     }
   });
 
