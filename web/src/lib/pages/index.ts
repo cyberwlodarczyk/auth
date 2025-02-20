@@ -1,3 +1,4 @@
+export { default as ChangeEmail } from "./ChangeEmail.svelte";
 export { default as ChangePassword } from "./ChangePassword.svelte";
 export { default as EnterSudoMode } from "./EnterSudoMode.svelte";
 export { default as Home } from "./Home.svelte";

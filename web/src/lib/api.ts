@@ -14,7 +14,8 @@ export interface User {
 async function request<T = null>(
   path: string,
   method: string,
-  json: any = null
+  json: any = null,
+  session: string | null = null
 ): Promise<T> {
   const headers: Record<string, string> = {};
   const init: RequestInit = { method, headers };
@@ -22,8 +23,8 @@ async function request<T = null>(
     init.body = JSON.stringify(json);
     headers["Content-Type"] = "application/json";
   }
-  if (store.session) {
-    headers["Authorization"] = `Bearer ${store.session}`;
+  if (session) {
+    headers["Authorization"] = `Bearer ${session}`;
   }
   const res = await fetch(`/api${path}`, init);
   if (res.status === 401) {
@@ -87,7 +88,12 @@ export async function resetPasswordFinish(token: string, password: string) {
 }
 
 export async function getUser() {
-  const res = await request<{ user: User } | null>("/user", "GET");
+  const res = await request<{ user: User } | null>(
+    "/user",
+    "GET",
+    null,
+    store.session
+  );
   if (!res) {
     store.user = null;
   } else {
@@ -96,14 +102,28 @@ export async function getUser() {
 }
 
 export async function changePassword(oldPassword: string, newPassword: string) {
-  await request("/user/password", "PUT", {
-    password: toBase64(oldPassword),
-    newPassword: toBase64(newPassword),
-  });
+  await request(
+    "/user/password",
+    "PUT",
+    {
+      password: toBase64(oldPassword),
+      newPassword: toBase64(newPassword),
+    },
+    store.session
+  );
 }
 
 export async function enterSudoMode(password: string) {
-  await request("/user/token/sudo", "POST", {
-    password: toBase64(password),
-  });
+  await request(
+    "/user/token/sudo",
+    "POST",
+    {
+      password: toBase64(password),
+    },
+    store.session
+  );
+}
+
+export async function changeEmail(token: string) {
+  await request("/user/email", "PUT", { token }, store.sudo);
 }
