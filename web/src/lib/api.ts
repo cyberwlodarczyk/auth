@@ -94,3 +94,10 @@ export async function getUser() {
     store.user = res.user;
   }
 }
+
+export async function changePassword(oldPassword: string, newPassword: string) {
+  await request("/user/password", "PUT", {
+    password: toBase64(oldPassword),
+    newPassword: toBase64(newPassword),
+  });
+}

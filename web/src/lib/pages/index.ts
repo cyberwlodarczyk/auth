@@ -1,3 +1,4 @@
+export { default as ChangePassword } from "./ChangePassword.svelte";
 export { default as Home } from "./Home.svelte";
 export { default as NotFound } from "./NotFound.svelte";
 export { default as Redirect } from "./Redirect.svelte";

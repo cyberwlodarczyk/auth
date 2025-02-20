@@ -6,17 +6,20 @@
     SignIn,
     SignUp,
     Home,
+    ChangePassword,
     Redirect,
   } from "./lib";
 </script>
 
 {#if store.user === undefined}
   {null}
-{:else if store.location === "/"}
+{:else if ["/", "/change-password"].includes(store.location)}
   {#if store.user === null}
     <Redirect to="/sign-in" />
   {:else if store.location === "/"}
     <Home user={store.user} />
+  {:else if store.location === "/change-password"}
+    <ChangePassword />
   {/if}
 {:else if ["/sign-up", "/sign-in", "/reset-password"].includes(store.location)}
   {#if store.user !== null}
