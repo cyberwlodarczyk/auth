@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { store } from "$lib/data";
+  import { Redirect } from "$lib/components";
+  import { Route } from "$lib/config";
   import {
-    store,
     NotFound,
     ResetPassword,
     SignIn,
@@ -8,38 +10,49 @@
     Home,
     ChangePassword,
     ChangeEmail,
-    Redirect,
     EnterSudoMode,
-  } from "./lib";
+  } from "./routes";
+
+  const PUBLIC_ROUTES: string[] = [
+    Route.SignUp,
+    Route.SignIn,
+    Route.ResetPassword,
+  ];
+  const SESSION_ROUTES: string[] = [
+    Route.Home,
+    Route.EnterSudoMode,
+    Route.ChangePassword,
+  ];
+  const SUDO_ROUTES: string[] = [Route.ChangeEmail];
 </script>
 
 {#if store.user === undefined}
   {null}
-{:else if ["/", "/enter-sudo-mode", "/change-password", "/change-email"].includes(store.location)}
-  {#if store.user === null}
-    <Redirect to="/sign-in" />
-  {:else if store.location === "/"}
-    <Home />
-  {:else if store.location === "/enter-sudo-mode"}
-    <EnterSudoMode />
-  {:else if store.location === "/change-password"}
-    <ChangePassword />
-  {:else if store.location === "/change-email"}
-    {#if store.sudo === null}
-      <Redirect to="/enter-sudo-mode" />
-    {:else}
-      <ChangeEmail />
-    {/if}
-  {/if}
-{:else if ["/sign-up", "/sign-in", "/reset-password"].includes(store.location)}
+{:else if PUBLIC_ROUTES.includes(store.location)}
   {#if store.user !== null}
-    <Redirect to="/" />
-  {:else if store.location === "/sign-up"}
+    <Redirect to={Route.Home} />
+  {:else if store.location === Route.SignUp}
     <SignUp />
-  {:else if store.location === "/sign-in"}
+  {:else if store.location === Route.SignIn}
     <SignIn />
-  {:else if store.location === "/reset-password"}
+  {:else if store.location === Route.ResetPassword}
     <ResetPassword />
+  {/if}
+{:else if SESSION_ROUTES.includes(store.location)}
+  {#if store.user === null}
+    <Redirect to={Route.SignIn} />
+  {:else if store.location === Route.Home}
+    <Home />
+  {:else if store.location === Route.EnterSudoMode}
+    <EnterSudoMode />
+  {:else if store.location === Route.ChangePassword}
+    <ChangePassword />
+  {/if}
+{:else if SUDO_ROUTES.includes(store.location)}
+  {#if store.sudo === null}
+    <Redirect to={Route.EnterSudoMode} />
+  {:else if store.location === Route.ChangeEmail}
+    <ChangeEmail />
   {/if}
 {:else}
   <NotFound />

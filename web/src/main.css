@@ -2,6 +2,7 @@
   --background: rgb(4, 4, 37);
   --text: rgb(237, 237, 253);
   --error: rgb(239, 153, 87);
+  --error-transparent: rgba(239, 153, 87, 0.2);
   --primary-1: rgb(145, 142, 244);
   --primary-2: rgb(165, 162, 246);
   --primary-transparent-1: rgba(145, 142, 244, 0.15);
