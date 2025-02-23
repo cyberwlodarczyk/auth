@@ -1,6 +1,12 @@
 <script lang="ts">
-  import { store } from "$lib/data";
-  import { Heading } from "$lib/components";
+  import { store, type User } from "$lib/data";
+  import { Heading, SudoTimer } from "$lib/components";
+
+  interface Props {
+    user: User;
+  }
+
+  let { user }: Props = $props();
 </script>
 
 <svelte:head>
@@ -8,9 +14,9 @@
 </svelte:head>
 
 <main>
-  <Heading>Hi, {store.user!.name}!</Heading>
+  <Heading>Hi, {user.name}!</Heading>
   {#if store.sudo}
-    <p role="alert">Sudo</p>
+    <SudoTimer token={store.sudo} />
   {/if}
 </main>
 
@@ -20,16 +26,5 @@
     flex-direction: column;
     align-items: center;
     gap: 0.5rem;
-  }
-
-  p {
-    text-transform: uppercase;
-    color: var(--error);
-    background-color: var(--error-transparent);
-    border-radius: var(--border-radius);
-    padding: 0.375rem 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    letter-spacing: 0.03125rem;
   }
 </style>

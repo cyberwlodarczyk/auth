@@ -78,4 +78,16 @@ $effect.root(() => {
       history.pushState(null, "", store.location);
     }
   });
+
+  $effect(() => {
+    if (!store.sudo) {
+      return;
+    }
+    const id = window.setTimeout(() => {
+      store.sudo = null;
+    }, store.sudo.expiresAt * 1000 - Date.now());
+    return () => {
+      window.clearTimeout(id);
+    };
+  });
 });

@@ -42,7 +42,7 @@
   {#if store.user === null}
     <Redirect to={Route.SignIn} />
   {:else if store.location === Route.Home}
-    <Home />
+    <Home user={store.user} />
   {:else if store.location === Route.EnterSudoMode}
     <EnterSudoMode />
   {:else if store.location === Route.ChangePassword}
